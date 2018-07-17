@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.stableapps</groupId>
 	<artifactId>okex-bookmap-adapter</artifactId>
-	<version>1.0</version>
+	<version>0.2-beta</version>
 	<packaging>jar</packaging>
 	<build>
 		<plugins>
