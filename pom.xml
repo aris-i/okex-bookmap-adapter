@@ -20,6 +20,14 @@
 							<goal>shade</goal>
 						</goals>
 						<configuration>
+							<artifactSet>
+								<excludes>
+									<exclude>*:log4j</exclude>
+									<exclude>*:commons-codec</exclude>
+									<exclude>*:gson</exclude>
+									<exclude>*:bm-l1api</exclude>
+								</excludes>
+							</artifactSet>
 							<transformers>
 								<!-- add Main-Class to manifest file -->
 								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

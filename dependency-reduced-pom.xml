@@ -16,6 +16,14 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <artifactSet>
+                <excludes>
+                  <exclude>*:log4j</exclude>
+                  <exclude>*:commons-codec</exclude>
+                  <exclude>*:gson</exclude>
+                  <exclude>*:bm-l1api</exclude>
+                </excludes>
+              </artifactSet>
               <transformers>
                 <transformer>
                   <mainClass>com.stableapps.okexbookmapadapter.bm.OkexRealtimeProvider</mainClass>
@@ -35,6 +43,12 @@
   </build>
   <dependencies>
     <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>1.2.17</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <version>1.16.20</version>
@@ -51,6 +65,24 @@
       <artifactId>hamcrest-core</artifactId>
       <version>1.3</version>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>1.11</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.4</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.bookmap</groupId>
+      <artifactId>bm-l1api</artifactId>
+      <version>7.0</version>
+      <scope>compile</scope>
     </dependency>
   </dependencies>
   <properties>
