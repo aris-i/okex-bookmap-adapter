@@ -41,6 +41,10 @@ import velox.api.layer1.data.UserPasswordDemoLoginData;
 @Log4j
 public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
+	private static final String INVALID_USERNAME_PASSWORD = "Please provide "
+		+ "apiKey::leverage::priceGranularity for username and secretKey for"
+		+ " password";
+
 	public static final int DEFAULT_MARKET_DEPTH_AMOUNT = 20;
 
 	private OkexConnector connector;
@@ -158,10 +162,19 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 	public void login(LoginData loginData) {
 		UserPasswordDemoLoginData userPasswordDemoLoginData = (UserPasswordDemoLoginData) loginData;
 		String[] splits = userPasswordDemoLoginData.user.split("::");
-		apiKey = splits[0];
-		leverRate = Integer.valueOf(splits[1]);
-		priceGranularity = Double.valueOf(splits[2]);
-		secretKey = userPasswordDemoLoginData.password;
+		try {
+			assert splits.length == 3;
+			apiKey = splits[0];
+			leverRate = Integer.valueOf(splits[1]);
+			priceGranularity = Double.valueOf(splits[2]);
+			secretKey = userPasswordDemoLoginData.password;
+		} catch (Exception e) {
+			adminListeners.forEach(l -> l.onLoginFailed(
+				LoginFailedReason.WRONG_CREDENTIALS,
+				INVALID_USERNAME_PASSWORD)
+			);
+			return;
+		}
 
 		// If connection process takes a while then it's better to do it in
 		// separate thread
@@ -183,8 +196,10 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 		} else {
 			// Report failed login
 			log.log(Level.INFO, "Login to OKEX failed");
-			adminListeners.forEach(l -> l.onLoginFailed(LoginFailedReason.WRONG_CREDENTIALS,
-				"Please provide apiKey:leverage for user and secretKey for password"));
+			adminListeners.forEach(l -> l.onLoginFailed(
+				LoginFailedReason.WRONG_CREDENTIALS,
+				INVALID_USERNAME_PASSWORD)
+			);
 		}
 
 	}
