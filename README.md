@@ -6,7 +6,7 @@ You can get the latest bookmap bm-l1api.jar and javadoc from the bookmap install
 
 mvn install:install-file -Dfile=bm-l1api.jar -DgroupId=com.bookmap -DartifactId=bm-l1api -Dversion=7.0 -Dpackaging=jar
 
-After installing the bookmap jar files.  You can generate the adapter jar file by running 'mvn package' on this project.  This will generate a jar file in the target folder. You will use the jar file with filename okex-bookmap-adapter-<version>.jar
+After installing the bookmap jar files.  You can generate the adapter jar file by running 'mvn package' on this project.  This will generate a jar file in the target folder. You will use the jar file with filename okex-bookmap-adapter-&lt;version&gt;.jar
 
 OKEX does not have a test account so you need to have a live account in order to use this adapter.
 
