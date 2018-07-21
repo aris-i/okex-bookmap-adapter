@@ -42,8 +42,8 @@ import velox.api.layer1.data.UserPasswordDemoLoginData;
 public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 	private static final String INVALID_USERNAME_PASSWORD = "Please provide "
-		+ "apiKey::leverage::priceGranularity for username and secretKey for"
-		+ " password";
+			+ "apiKey::leverage::priceGranularity for username and secretKey for"
+			+ " password";
 
 	public static final int DEFAULT_MARKET_DEPTH_AMOUNT = 20;
 
@@ -82,10 +82,7 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 					return;
 				}
 
-				boolean isSubscribed
-					= getConnector().subscribeContractMarketDepthIncremental(symbol.toLowerCase(), expiration)
-					&& getConnector().subscribeContractMarketPrice(symbol.toLowerCase(), expiration)
-					&& getConnector().subscribeContractTradeRecord(symbol.toLowerCase(), expiration);
+				boolean isSubscribed = subscribe(symbol, expiration);
 				if (!isSubscribed) {
 					log.log(Level.INFO, "Failed to subscribed to " + alias);
 					getConnector().unsubscribeContractMarketDepthFull(symbol.toLowerCase(), expiration, DEFAULT_MARKET_DEPTH_AMOUNT);
@@ -100,12 +97,18 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 				aliasInstruments.put(alias, instrument);
 
 				final InstrumentInfo instrumentInfo = new InstrumentInfo(
-					symbol, exchange, type, instrument.pips, 1, "", true);
+						symbol, exchange, type, instrument.pips, 1, "", true);
 
 				log.log(Level.INFO, "Now subscribed to " + alias);
 				instrumentListeners.forEach(l -> l.onInstrumentAdded(alias, instrumentInfo));
 			}
 		});
+	}
+
+	protected boolean subscribe(String symbol, Expiration expiration) {
+		return getConnector().subscribeContractMarketDepthIncremental(symbol.toLowerCase(), expiration)
+				&& getConnector().subscribeContractMarketPrice(symbol.toLowerCase(), expiration)
+				&& getConnector().subscribeContractTradeRecord(symbol.toLowerCase(), expiration);
 	}
 
 	protected Object[] splitToSymbolAndExpiration(String alias) {
@@ -169,9 +172,10 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			priceGranularity = Double.valueOf(splits[2]);
 			secretKey = userPasswordDemoLoginData.password;
 		} catch (Exception e) {
+			log.warn("Could not login.", e);
 			adminListeners.forEach(l -> l.onLoginFailed(
-				LoginFailedReason.WRONG_CREDENTIALS,
-				INVALID_USERNAME_PASSWORD)
+					LoginFailedReason.WRONG_CREDENTIALS,
+					INVALID_USERNAME_PASSWORD)
 			);
 			return;
 		}
@@ -197,8 +201,8 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			// Report failed login
 			log.log(Level.INFO, "Login to OKEX failed");
 			adminListeners.forEach(l -> l.onLoginFailed(
-				LoginFailedReason.WRONG_CREDENTIALS,
-				INVALID_USERNAME_PASSWORD)
+					LoginFailedReason.WRONG_CREDENTIALS,
+					INVALID_USERNAME_PASSWORD)
 			);
 		}
 
@@ -246,6 +250,9 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 	protected void onMarketPrice(String symbol, Expiration expiration, MarketPrice marketPrice) {
 	}
 
+	protected void onConnectionRestored() {
+	}
+
 	private class OkexClient extends AbstractClient {
 
 		@Override
@@ -258,12 +265,12 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			}
 			log.debug("New market price data received for " + alias);
 			log.debug("Sell: " + (int) (Double.valueOf(marketPrice.getSell()) / priceGranularity)
-				+ ", Buy: " + (int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity));
+					+ ", Buy: " + (int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity));
 			assert Double.valueOf(marketPrice.getSell()) < Double.valueOf(marketPrice.getBuy());
 			dataListeners.forEach(l -> l.onDepth(alias, true,
-				(int) (Double.valueOf(marketPrice.getSell()) / priceGranularity), 0));
+					(int) (Double.valueOf(marketPrice.getSell()) / priceGranularity), 0));
 			dataListeners.forEach(l -> l.onDepth(alias, false,
-				(int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity), 0));
+					(int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity), 0));
 
 			OkexRealTimeProvider.this.onMarketPrice(symbol, expiration, marketPrice);
 		}
@@ -280,15 +287,15 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			log.debug(marketDepths);
 			marketDepths.getAskDatas().forEach(askData -> {
 				log.log(Level.DEBUG, "Ask: " + (int) (askData.getPrice() / priceGranularity) + ", amount: "
-					+ (int) askData.getContractAmount());
+						+ (int) askData.getContractAmount());
 				dataListeners.forEach(l -> l.onDepth(alias, false,
-					(int) (askData.getPrice() / priceGranularity), (int) askData.getContractAmount()));
+						(int) (askData.getPrice() / priceGranularity), (int) askData.getContractAmount()));
 			});
 			marketDepths.getBidDatas().forEach(bidData -> {
 				log.log(Level.DEBUG, "Bid: " + (int) (bidData.getPrice() / priceGranularity) + ", amount: "
-					+ (int) bidData.getContractAmount());
+						+ (int) bidData.getContractAmount());
 				dataListeners.forEach(l -> l.onDepth(alias, true,
-					(int) (bidData.getPrice() / priceGranularity), (int) bidData.getContractAmount()));
+						(int) (bidData.getPrice() / priceGranularity), (int) bidData.getContractAmount()));
 			});
 
 		}
@@ -298,15 +305,15 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			String alias = createAlias(symbol.toUpperCase(), expiration);
 			log.debug("Trade Record Received");
 			log.debug("TR Details: " + tradeRecord.getType() + ", "
-				+ tradeRecord.getPrice() + ", " + tradeRecord.getAmount());
+					+ tradeRecord.getPrice() + ", " + tradeRecord.getAmount());
 			boolean isBidAggressor = tradeRecord.getType().equals("ask") ? true : false;
 			boolean isOtc = false;
 			if (isBidAggressor) {
 				dataListeners.forEach(l -> l.onTrade(alias, tradeRecord.getPrice() / priceGranularity,
-					(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
+						(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
 			} else {
 				dataListeners.forEach(l -> l.onTrade(alias, tradeRecord.getPrice() / priceGranularity,
-					(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
+						(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
 			}
 
 		}
@@ -352,7 +359,14 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 		@Override
 		public void onConnectionRestored() {
+			aliasInstruments.keySet().forEach(alias -> {
+				Object[] splitToSymbolAndExpiration = splitToSymbolAndExpiration(alias);
+				String symbol = (String) splitToSymbolAndExpiration[0];
+				Expiration expiration = (Expiration) splitToSymbolAndExpiration[1];
+				subscribe(symbol, expiration);
+			});
 			adminListeners.forEach(listener -> listener.onConnectionRestored());
+			OkexRealTimeProvider.this.onConnectionRestored();
 		}
 
 	}

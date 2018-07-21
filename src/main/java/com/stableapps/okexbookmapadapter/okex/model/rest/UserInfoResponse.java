@@ -16,5 +16,7 @@ public class UserInfoResponse {
 	public boolean result;
 	@JsonProperty("info")
 	public Info info;
+	@JsonProperty("error_code")
+	public int errorCode;
 
 }

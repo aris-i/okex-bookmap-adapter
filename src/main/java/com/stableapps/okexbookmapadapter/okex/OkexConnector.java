@@ -81,9 +81,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.websocket.ClientEndpointConfig;
@@ -140,6 +141,7 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 	private final String secretKey;
 	private final int leverRate;
 	protected final OkexFuturesRestClient okexRestClient;
+	private final ExecutorService singleThreadExecutor;
 
 	public OkexConnector(String apiKey, String secretKey, int leverRate, AbstractClient client) {
 		this.apiKey = apiKey;
@@ -160,6 +162,8 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 		objectMapper = new ObjectMapper();
 		this.client = client;
 		this.okexRestClient = new OkexFuturesRestClient(apiKey, secretKey);
+
+		singleThreadExecutor = Executors.newSingleThreadExecutor();
 	}
 
 	/*
@@ -490,73 +494,10 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 
 			ClientManager client = ClientManager.createClient();
 			client.getProperties().put(ClientProperties.RECONNECT_HANDLER,
-					new ReconnectHandlerImpl(10, 1));
+					new ReconnectHandlerImpl(5));
 			log.info("Connecting to server");
-			session = client.connectToServer(this, cec,
+			client.connectToServer(this, cec,
 					new URI("wss://real.okex.com:10440/websocket/okexapi"));
-			session.addMessageHandler((MessageHandler.Whole<Message>) (Message t) -> {
-				if (t instanceof Pong) {
-					setPong((Pong) t);
-				} else if (t instanceof SubscribeContractMarketPriceInitialResponse) {
-					setSubscribeContractMarketPriceInitialResponse(
-							(SubscribeContractMarketPriceInitialResponse) t);
-				} else if (t instanceof SubscribeContractMarketPriceResponse) {
-					setSubscribeContractMarketPriceResponse(
-							(SubscribeContractMarketPriceResponse) t);
-				} else if (t instanceof SubscribeContractCandlestickChartDataInitialResponse) {
-					setSubscribeContractCandlestickChartDataInitialResponse(
-							(SubscribeContractCandlestickChartDataInitialResponse) t);
-				} else if (t instanceof SubscribeContractCandlestickChartDataResponse) {
-					setSubscribeContractCandlestickChartDataResponse(
-							(SubscribeContractCandlestickChartDataResponse) t);
-				} else if (t instanceof SubscribeContractMarketDepthInitialResponse) {
-					setSubscribeContractMarketDepthInitialResponse(
-							(SubscribeContractMarketDepthInitialResponse) t);
-				} else if (t instanceof SubscribeContractMarketDepthResponse) {
-					setSubscribeContractMarketDepthResponse(
-							(SubscribeContractMarketDepthResponse) t);
-				} else if (t instanceof SubscribeContractTradeRecordInitialResponse) {
-					setSubscribeContractTradeRecordInitialResponse(
-							(SubscribeContractTradeRecordInitialResponse) t);
-				} else if (t instanceof SubscribeContractTradeRecordResponse) {
-					setSubscribeContractTradeRecordResponse(
-							(SubscribeContractTradeRecordResponse) t);
-				} else if (t instanceof SubscribeContractIndexPriceInitialResponse) {
-					setSubscribeContractIndexPriceInitialResponse(
-							(SubscribeContractIndexPriceInitialResponse) t);
-				} else if (t instanceof SubscribeContractIndexPriceResponse) {
-					setSubscribeContractIndexPriceResponse(
-							(SubscribeContractIndexPriceResponse) t);
-				} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceInitialResponse) {
-					setSubscribeEstimatedFuturesDeliveryPriceInitialResponse(
-							(SubscribeEstimatedFuturesDeliveryPriceInitialResponse) t);
-				} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceSecondaryResponse) {
-					setSubscribeEstimatedFuturesDeliveryPriceSecondaryResponse(
-							(SubscribeEstimatedFuturesDeliveryPriceSecondaryResponse) t);
-				} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceResponse) {
-					setSubscribeEstimatedFuturesDeliveryPriceResponse(
-							(SubscribeEstimatedFuturesDeliveryPriceResponse) t);
-				} else if (t instanceof LoginResponse) {
-					setLoginResponse((LoginResponse) t);
-				} else if (t instanceof SubscribeContractTradeRecordsResponse) {
-					setSubscribeContractTradeRecordsResponse(
-							(SubscribeContractTradeRecordsResponse) t);
-				} else if (t instanceof SubscribeContractsUserInfoFixedMarginResponse) {
-					setSubscribeContractsUserInfoFixedMarginResponse(
-							(SubscribeContractsUserInfoFixedMarginResponse) t);
-				} else if (t instanceof SubscribeContractUserPositionsFixedMarginResponse) {
-					setSubscribeContractUserPositionsFixedMarginResponse(
-							(SubscribeContractUserPositionsFixedMarginResponse) t);
-				} else if (t instanceof UnsubscribeResponse) {
-					setUnsubscribeResponse((UnsubscribeResponse) t);
-				} else {
-					// fall back decoder. Print no decoder available + message 
-					log.warn("No decoder available. Response is : \n" + t);
-				}
-			});
-
-			cancelTimer();
-			getTimer().schedule(new PingTask(), 1000, HEART_BEAT_INTERVAL);
 		} catch (URISyntaxException | DeploymentException | IOException ex) {
 			log.fatal("Could not connect to OKEx", ex);
 		}
@@ -587,14 +528,22 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 	}
 
 	private void invalidateSession() {
+		log.info("Invalidate Session");
 		session = null;
 	}
 
 	@Override
 	public void onOpen(Session session, EndpointConfig config) {
+		log.info("onOpen");
+		this.session = session;
+		session.addMessageHandler((MessageHandler.Whole<Message>) (Message t) -> handleMessage(t));
+
+		cancelTimer();
+		getTimer().schedule(new PingTask(), 1000, HEART_BEAT_INTERVAL);
+
 		if (reconnecting) {
-			client.onConnectionRestored();
 			reconnecting = false;
+			singleThreadExecutor.submit(() -> client.onConnectionRestored());
 		}
 	}
 
@@ -605,7 +554,69 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 
 	@Override
 	public void onClose(Session session, CloseReason closeReason) {
+		log.info("onClose");
 		invalidateSession();
+	}
+
+	private void handleMessage(Message t) {
+		if (t instanceof Pong) {
+			setPong((Pong) t);
+		} else if (t instanceof SubscribeContractMarketPriceInitialResponse) {
+			setSubscribeContractMarketPriceInitialResponse(
+					(SubscribeContractMarketPriceInitialResponse) t);
+		} else if (t instanceof SubscribeContractMarketPriceResponse) {
+			setSubscribeContractMarketPriceResponse(
+					(SubscribeContractMarketPriceResponse) t);
+		} else if (t instanceof SubscribeContractCandlestickChartDataInitialResponse) {
+			setSubscribeContractCandlestickChartDataInitialResponse(
+					(SubscribeContractCandlestickChartDataInitialResponse) t);
+		} else if (t instanceof SubscribeContractCandlestickChartDataResponse) {
+			setSubscribeContractCandlestickChartDataResponse(
+					(SubscribeContractCandlestickChartDataResponse) t);
+		} else if (t instanceof SubscribeContractMarketDepthInitialResponse) {
+			setSubscribeContractMarketDepthInitialResponse(
+					(SubscribeContractMarketDepthInitialResponse) t);
+		} else if (t instanceof SubscribeContractMarketDepthResponse) {
+			setSubscribeContractMarketDepthResponse(
+					(SubscribeContractMarketDepthResponse) t);
+		} else if (t instanceof SubscribeContractTradeRecordInitialResponse) {
+			setSubscribeContractTradeRecordInitialResponse(
+					(SubscribeContractTradeRecordInitialResponse) t);
+		} else if (t instanceof SubscribeContractTradeRecordResponse) {
+			setSubscribeContractTradeRecordResponse(
+					(SubscribeContractTradeRecordResponse) t);
+		} else if (t instanceof SubscribeContractIndexPriceInitialResponse) {
+			setSubscribeContractIndexPriceInitialResponse(
+					(SubscribeContractIndexPriceInitialResponse) t);
+		} else if (t instanceof SubscribeContractIndexPriceResponse) {
+			setSubscribeContractIndexPriceResponse(
+					(SubscribeContractIndexPriceResponse) t);
+		} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceInitialResponse) {
+			setSubscribeEstimatedFuturesDeliveryPriceInitialResponse(
+					(SubscribeEstimatedFuturesDeliveryPriceInitialResponse) t);
+		} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceSecondaryResponse) {
+			setSubscribeEstimatedFuturesDeliveryPriceSecondaryResponse(
+					(SubscribeEstimatedFuturesDeliveryPriceSecondaryResponse) t);
+		} else if (t instanceof SubscribeEstimatedFuturesDeliveryPriceResponse) {
+			setSubscribeEstimatedFuturesDeliveryPriceResponse(
+					(SubscribeEstimatedFuturesDeliveryPriceResponse) t);
+		} else if (t instanceof LoginResponse) {
+			setLoginResponse((LoginResponse) t);
+		} else if (t instanceof SubscribeContractTradeRecordsResponse) {
+			setSubscribeContractTradeRecordsResponse(
+					(SubscribeContractTradeRecordsResponse) t);
+		} else if (t instanceof SubscribeContractsUserInfoFixedMarginResponse) {
+			setSubscribeContractsUserInfoFixedMarginResponse(
+					(SubscribeContractsUserInfoFixedMarginResponse) t);
+		} else if (t instanceof SubscribeContractUserPositionsFixedMarginResponse) {
+			setSubscribeContractUserPositionsFixedMarginResponse(
+					(SubscribeContractUserPositionsFixedMarginResponse) t);
+		} else if (t instanceof UnsubscribeResponse) {
+			setUnsubscribeResponse((UnsubscribeResponse) t);
+		} else {
+			// fall back decoder. Print no decoder available + message 
+			log.warn("No decoder available. Response is : \n" + t);
+		}
 	}
 
 	public static interface MarketPriceListener {
@@ -819,7 +830,7 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 	private void setSubscribeContractMarketDepthResponse(
 			SubscribeContractMarketDepthResponse subscribeContractMarketDepthResponse) {
 		String channel = subscribeContractMarketDepthResponse.getChannel();
-		log.debug("channel: " +channel);
+		log.debug("channel: " + channel);
 		//Example of channel: ok_sub_futureusd_btc_depth_this_week_20
 		Matcher m = MARKET_DEPTH_CHANNEL.matcher(channel);
 		if (!m.matches()) {
@@ -979,11 +990,12 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 	}
 
 	public static void main(String[] args) {
-		AbstractClient client = new PrintoutClientImpl();
+		PrintoutClientImpl client = new PrintoutClientImpl();
 		String apiKey = "d7086a54-4080-4a2b-bb9b-d178912b1b5f";
 		String secretKey = "7F2F116B07679A1ABC5AC5B2468133BA";
 		int leverRate = 10;
 		try (OkexConnector connector = new OkexConnector(apiKey, secretKey, leverRate, client)) {
+			client.setConnector(connector);
 			connector.login();
 			connector.subscribeContractMarketPrice("btc", Expiration.quarter);
 			Thread.sleep(5000);
@@ -1056,12 +1068,9 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 
 	private class ReconnectHandlerImpl extends ClientManager.ReconnectHandler {
 
-		private final int maxAttempt;
 		private final long delay;
-		private int counter = 0;
 
-		public ReconnectHandlerImpl(int maxAttempt, long delay) {
-			this.maxAttempt = maxAttempt;
+		public ReconnectHandlerImpl(long delay) {
 			this.delay = delay;
 		}
 
@@ -1069,29 +1078,20 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 		public boolean onDisconnect(CloseReason closeReason) {
 			client.onConnectionLost(ClosedConnectionType.Disconnect, closeReason.getReasonPhrase());
 			if (closeReason.getCloseCode() == CloseReason.CloseCodes.NORMAL_CLOSURE) {
+				log.info("Disconnect due to normal closure.  No need to reconnect.");
 				return false;
 			}
-			counter++;
-			if (counter <= maxAttempt) {
-				log.warn("### Reconnecting... (reconnect count: " + counter + ")");
-				reconnecting = true;
-				return true;
-			} else {
-				return false;
-			}
+			log.warn("### Got Disconnected.  Reconnecting...");
+			reconnecting = true;
+			return true;
 		}
 
 		@Override
 		public boolean onConnectFailure(Exception exception) {
 			client.onConnectionLost(ClosedConnectionType.ConnectionFailure, "Network Connection Problem");
-			counter++;
-			if (counter <= maxAttempt) {
-				log.warn("### Reconnecting... (reconnect count: " + counter + ") " + exception.getMessage());
-				reconnecting = true;
-				return true;
-			} else {
-				return false;
-			}
+			log.warn("### Reconnecting caused by:  " + exception.getMessage());
+			reconnecting = true;
+			return true;
 		}
 
 		@Override
@@ -1102,12 +1102,18 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 
 	private static class PrintoutClientImpl extends AbstractClient {
 
+		private OkexConnector connector;
+
 		public PrintoutClientImpl() {
+		}
+
+		public void setConnector(OkexConnector connector) {
+			this.connector = connector;
 		}
 
 		@Override
 		public void onMarketPrice(String symbol, Expiration expiration, MarketPrice marketPrice) {
-//			log.info(marketPrice);
+			log.info(marketPrice);
 		}
 
 		@Override
@@ -1163,6 +1169,8 @@ public class OkexConnector extends Endpoint implements AutoCloseable {
 		@Override
 		public void onConnectionRestored() {
 			log.info("Connection restored");
+			connector.login();
+			connector.subscribeContractMarketPrice("btc", Expiration.quarter);
 		}
 	}
 }
