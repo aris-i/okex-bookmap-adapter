@@ -318,6 +318,13 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			}
 		} else {
 			log.error("Unsupported order update parameter: " + orderUpdateParameters.getClass().getSimpleName());
+			adminListeners
+					.forEach(
+							l -> l.onSystemTextMessage(
+									"Unsupported order update action",
+									SystemTextMessageType.ORDER_FAILURE
+							)
+					);
 		}
 	}
 
@@ -589,7 +596,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	private Optional<Contract> fetchContractInfo(String symbol, Expiration expiration) {
 		UserInfoResponse userInfoResponse = getConnector().fetchUserInfo();
 		if (!userInfoResponse.result) {
-			log.warn("fetchUserInfo failed with error code: " +userInfoResponse.errorCode);
+			log.warn("fetchUserInfo failed with error code: " + userInfoResponse.errorCode);
 			return Optional.empty();
 		}
 		Optional<Contract> contract = userInfoResponse.info
@@ -736,7 +743,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			String apiKey = "d7086a54-4080-4a2b-bb9b-d178912b1b5f";
 			String secretKey = "7F2F116B07679A1ABC5AC5B2468133BA";
 			int leverRate = 10;
-			provider.login(new UserPasswordDemoLoginData(apiKey + "::" + leverRate +"::0.5", secretKey, false));
+			provider.login(new UserPasswordDemoLoginData(apiKey + "::" + leverRate + "::0.5", secretKey, false));
 			Thread.sleep(2000);
 
 			provider.subscribe("BTC", "OKEX", "QUARTER");
