@@ -67,9 +67,9 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	private static boolean RUN_MAIN = false;
 	private static final String DEFAULT_CURRENCY = "usd";
 	public static final EnumSet<OkexOrderType> LONG_ORDER_TYPES
-			= EnumSet.of(OkexOrderType.OpenLongPosition, OkexOrderType.CloseShortPosition);
+		= EnumSet.of(OkexOrderType.OpenLongPosition, OkexOrderType.CloseShortPosition);
 	public static final EnumSet<OkexOrderType> SHORT_ORDER_TYPES
-			= EnumSet.of(OkexOrderType.OpenShortPosition, OkexOrderType.CloseLongPosition);
+		= EnumSet.of(OkexOrderType.OpenShortPosition, OkexOrderType.CloseLongPosition);
 
 	HashMap<Long, String> okexBmIds = new HashMap<>();
 	HashMap<String, Long> bmOkexIds = new HashMap<>();
@@ -89,11 +89,11 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	public Layer1ApiProviderSupportedFeatures getSupportedFeatures() {
 		// Expanding parent supported features, reporting basic trading support
 		return super.getSupportedFeatures()
-				.toBuilder()
-				.setTrading(true)
-				.setSupportedOrderDurations(Arrays.asList(new OrderDuration[]{OrderDuration.GTC}))
-				.setSupportedStopOrders(Arrays.asList(new OrderType[]{OrderType.MKT}))
-				.build();
+			.toBuilder()
+			.setTrading(true)
+			.setSupportedOrderDurations(Arrays.asList(new OrderDuration[]{OrderDuration.GTC}))
+			.setSupportedStopOrders(Arrays.asList(new OrderType[]{OrderType.MKT}))
+			.build();
 	}
 
 	@Override
@@ -102,46 +102,46 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			ArrayList<String> forRemoval = new ArrayList<>();
 			String alias = createAlias(symbol, expiration);
 			bmIdStopOrders.entrySet()
-					.stream()
-					.filter(entry -> alias.equals(entry.getValue().getInstrumentAlias()))
-					.forEach(entry -> {
-						String bmId = entry.getKey();
-						OrderInfoBuilder stopOrder = entry.getValue();
-						if (stopOrder.isBuy()) {
-							if (stopOrder.getStopPrice() < Double.valueOf(marketPrice.getBuy())) {
-								//Convert this to market stopOrder and submit
-								synchronized (aliasStatusInfos) {
-									log.info("Buy Stop Order Triggered");
-									StatusInfo statusInfo = aliasStatusInfos.get(alias);
-									forRemoval.add(bmId);
-									stopOrder.setType(OrderType.MKT);
-									OkexOrderType orderType
-											= statusInfo.position < 0
-													? OkexOrderType.CloseShortPosition
-													: OkexOrderType.OpenLongPosition;
-									sendOrder(symbol, expiration, orderType,
-											stopOrder.getUnfilled(), MatchPrice.Yes,
-											stopOrder.getStopPrice(), stopOrder);
-								}
-							}
-						} else {
-							if (stopOrder.getStopPrice() > Double.valueOf(marketPrice.getSell())) {
-								synchronized (aliasStatusInfos) {
-									log.info("Sell Stop Order Triggered");
-									StatusInfo statusInfo = aliasStatusInfos.get(alias);
-									forRemoval.add(bmId);
-									stopOrder.setType(OrderType.MKT);
-									OkexOrderType orderType
-											= statusInfo.position > 0
-													? OkexOrderType.CloseLongPosition
-													: OkexOrderType.OpenShortPosition;
-									sendOrder(symbol, expiration, orderType,
-											stopOrder.getUnfilled(), MatchPrice.Yes,
-											stopOrder.getStopPrice(), stopOrder);
-								}
+				.stream()
+				.filter(entry -> alias.equals(entry.getValue().getInstrumentAlias()))
+				.forEach(entry -> {
+					String bmId = entry.getKey();
+					OrderInfoBuilder stopOrder = entry.getValue();
+					if (stopOrder.isBuy()) {
+						if (stopOrder.getStopPrice() < Double.valueOf(marketPrice.getBuy())) {
+							//Convert this to market stopOrder and submit
+							synchronized (aliasStatusInfos) {
+								log.info("Buy Stop Order Triggered");
+								StatusInfo statusInfo = aliasStatusInfos.get(alias);
+								forRemoval.add(bmId);
+								stopOrder.setType(OrderType.MKT);
+								OkexOrderType orderType
+									= statusInfo.position < 0
+										? OkexOrderType.CloseShortPosition
+										: OkexOrderType.OpenLongPosition;
+								sendOrder(symbol, expiration, orderType,
+									stopOrder.getUnfilled(), MatchPrice.Yes,
+									stopOrder.getStopPrice(), stopOrder);
 							}
 						}
-					});
+					} else {
+						if (stopOrder.getStopPrice() > Double.valueOf(marketPrice.getSell())) {
+							synchronized (aliasStatusInfos) {
+								log.info("Sell Stop Order Triggered");
+								StatusInfo statusInfo = aliasStatusInfos.get(alias);
+								forRemoval.add(bmId);
+								stopOrder.setType(OrderType.MKT);
+								OkexOrderType orderType
+									= statusInfo.position > 0
+										? OkexOrderType.CloseLongPosition
+										: OkexOrderType.OpenShortPosition;
+								sendOrder(symbol, expiration, orderType,
+									stopOrder.getUnfilled(), MatchPrice.Yes,
+									stopOrder.getStopPrice(), stopOrder);
+							}
+						}
+					}
+				});
 			forRemoval.forEach(bmIdStopOrders::remove);
 		}
 	}
@@ -175,20 +175,20 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 		String bmId = UUID.randomUUID().toString();
 		final OrderInfoBuilder orderInfo = new OrderInfoBuilder(
-				simpleParameters.alias,
-				bmId,
-				simpleParameters.isBuy,
-				orderType,
-				simpleParameters.clientId,
-				simpleParameters.doNotIncrease);
+			simpleParameters.alias,
+			bmId,
+			simpleParameters.isBuy,
+			orderType,
+			simpleParameters.clientId,
+			simpleParameters.doNotIncrease);
 
 		log.info("Limit Price: " + simpleParameters.limitPrice);
 		log.info("Stop Price: " + simpleParameters.stopPrice);
 		orderInfo.setStopPrice(simpleParameters.stopPrice)
-				.setLimitPrice(simpleParameters.limitPrice)
-				.setUnfilled(simpleParameters.size)
-				.setDuration(OrderDuration.GTC)
-				.setStatus(OrderStatus.PENDING_SUBMIT);
+			.setLimitPrice(simpleParameters.limitPrice)
+			.setUnfilled(simpleParameters.size)
+			.setDuration(OrderDuration.GTC)
+			.setStatus(OrderStatus.PENDING_SUBMIT);
 		tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
 
 		orderInfo.markAllUnchanged();
@@ -199,12 +199,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			orderInfo.markAllUnchanged();
 
 			adminListeners
-					.forEach(
-							l -> l.onSystemTextMessage(
-									"We current don't support STP_LMT",
-									SystemTextMessageType.ORDER_FAILURE
-							)
-					);
+				.forEach(
+					l -> l.onSystemTextMessage(
+						"We current don't support STP_LMT",
+						SystemTextMessageType.ORDER_FAILURE
+					)
+				);
 			return;
 		}
 
@@ -214,16 +214,16 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		}
 
 		MatchPrice matchPrice
-				= orderType == OrderType.LMT
-						? MatchPrice.No
-						: MatchPrice.Yes;
+			= orderType == OrderType.LMT
+				? MatchPrice.No
+				: MatchPrice.Yes;
 
 		int amount = simpleParameters.size;
 		double price = simpleParameters.limitPrice;
 		OkexOrderType okexOrderType = determineOkexOrderType(orderType, simpleParameters.isBuy);
 		log.info("OkexOrderType: " + orderType);
 		sendOrder(symbol, expiration, okexOrderType, amount, matchPrice, price,
-				orderInfo);
+			orderInfo);
 	}
 
 	private void trackStopOrder(final OrderInfoBuilder orderInfo, String symbol, Expiration expiration) {
@@ -240,19 +240,19 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	}
 
 	private void sendOrder(String symbol, Expiration expiration, OkexOrderType orderType, int amount,
-			MatchPrice matchPrice, double price, final OrderInfoBuilder orderInfo) {
+		MatchPrice matchPrice, double price, final OrderInfoBuilder orderInfo) {
 
 		singleThreadExecutor.submit(() -> {
 			synchronized (bmIdWorkingOrders) {
 				PlaceOrderResponse orderResponse = getConnector().placeOrder(PlaceOrderRequest
-						.builder()
-						.amount(amount)
-						.expiration(expiration)
-						.matchPrice(matchPrice.getValue())
-						.price(price)
-						.symbol(symbol.toLowerCase())
-						.type(orderType.getValue())
-						.build()
+					.builder()
+					.amount(amount)
+					.expiration(expiration)
+					.matchPrice(matchPrice.getValue())
+					.price(price)
+					.symbol(symbol.toLowerCase())
+					.type(orderType.getValue())
+					.build()
 				);
 
 				if (!orderResponse.isResult()) {
@@ -262,7 +262,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					orderInfo.markAllUnchanged();
 
 					adminListeners.forEach(l -> l.onSystemTextMessage("Failed to place order with error code: "
-							+ orderResponse.getErrorCode(), SystemTextMessageType.ORDER_FAILURE));
+						+ orderResponse.getErrorCode(), SystemTextMessageType.ORDER_FAILURE));
 					return;
 				}
 
@@ -282,12 +282,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		switch (orderType) {
 			case LMT:
 				return buy
-						? OkexOrderType.OpenLongPosition
-						: OkexOrderType.OpenShortPosition;
+					? OkexOrderType.OpenLongPosition
+					: OkexOrderType.OpenShortPosition;
 			case MKT:
 				return buy
-						? OkexOrderType.CloseShortPosition
-						: OkexOrderType.CloseLongPosition;
+					? OkexOrderType.CloseShortPosition
+					: OkexOrderType.CloseLongPosition;
 			default:
 				String message = "No supported order type: " + orderType;
 				log.warn(message);
@@ -319,22 +319,22 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		} else {
 			log.error("Unsupported order update parameter: " + orderUpdateParameters.getClass().getSimpleName());
 			adminListeners
-					.forEach(
-							l -> l.onSystemTextMessage(
-									"Unsupported order update action",
-									SystemTextMessageType.ORDER_FAILURE
-							)
-					);
+				.forEach(
+					l -> l.onSystemTextMessage(
+						"Unsupported order update action",
+						SystemTextMessageType.ORDER_FAILURE
+					)
+				);
 		}
 	}
 
 	private void cancelStopOrder(String orderId) {
 		synchronized (bmIdStopOrders) {
 			Optional<OrderInfoBuilder> wOrder = bmIdStopOrders
-					.values()
-					.stream()
-					.filter(o -> o.getOrderId().equals(orderId))
-					.findFirst();
+				.values()
+				.stream()
+				.filter(o -> o.getOrderId().equals(orderId))
+				.findFirst();
 
 			if (!wOrder.isPresent()) {
 				log.warn("No stop Order match: " + orderId);
@@ -357,21 +357,21 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	private void sendCancelOrder(Long okexId, String symbol, Expiration expiration) {
 		singleThreadExecutor.submit(() -> {
 			CancelOrdersResponse response = getConnector().cancelOrders(
-					CancelOrdersRequest.builder()
-							.orderIds(String.valueOf(okexId))
-							.expiration(expiration)
-							.symbol(symbol.toLowerCase())
-							.build()
+				CancelOrdersRequest.builder()
+					.orderIds(String.valueOf(okexId))
+					.expiration(expiration)
+					.symbol(symbol.toLowerCase())
+					.build()
 			);
 
 			if (!response.isResult()) {
 				adminListeners
-						.forEach(
-								l -> l.onSystemTextMessage(
-										"Could not cancel orders",
-										SystemTextMessageType.ORDER_FAILURE
-								)
-						);
+					.forEach(
+						l -> l.onSystemTextMessage(
+							"Could not cancel orders",
+							SystemTextMessageType.ORDER_FAILURE
+						)
+					);
 			}
 		});
 	}
@@ -389,12 +389,6 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		need.  Anyway this does not happen often.
 		 */
 		String alias = createAlias(symbol, expiration);
-		synchronized (aliasInstruments) {
-			log.info("We are not subscribed to this: " + alias + " No need to send status update");
-			if (!aliasInstruments.containsKey(alias)) {
-				return;
-			}
-		}
 		final int _volume = volume;
 		ScheduledFuture<?> sendStatusInfoFuture = aliasSendStatusInfoFutures.get(alias);
 		if (sendStatusInfoFuture != null && !sendStatusInfoFuture.isDone()) {
@@ -402,6 +396,13 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		}
 
 		sendStatusInfoFuture = singleThreadScheduledExecutor.schedule(() -> {
+			synchronized (aliasInstruments) {
+				log.info("We are not subscribed to this: " + alias + " No need to send status update");
+				if (!aliasInstruments.containsKey(alias)) {
+					return;
+				}
+			}
+
 			synchronized (aliasStatusInfos) {
 				synchronized (fetchInfos) {
 					log.info("Sending Status Info");
@@ -424,12 +425,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 						if (!contract.isPresent()) {
 							log.warn("Could not get latest status info from OKEX");
 							adminListeners
-									.forEach(
-											l -> l.onSystemTextMessage(
-													"Could not get latest status info from OKEX",
-													SystemTextMessageType.UNCLASSIFIED
-											)
-									);
+								.forEach(
+									l -> l.onSystemTextMessage(
+										"Could not get latest status info from OKEX",
+										SystemTextMessageType.UNCLASSIFIED
+									)
+								);
 							return;
 						}
 						MarketPrice marketPrice = fetchLatestMarketPrice(symbol, expiration);
@@ -447,12 +448,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 						if (!fetchOrdersInfo.isPresent()) {
 							log.warn("Could not get latest status info from OKEX");
 							adminListeners
-									.forEach(
-											l -> l.onSystemTextMessage(
-													"Could not get latest status info from OKEX",
-													SystemTextMessageType.UNCLASSIFIED
-											)
-									);
+								.forEach(
+									l -> l.onSystemTextMessage(
+										"Could not get latest status info from OKEX",
+										SystemTextMessageType.UNCLASSIFIED
+									)
+								);
 							return;
 						}
 
@@ -473,14 +474,14 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 							}
 
 							workingBuys
-									= bmIdWorkingOrders.values()
-											.stream()
-											.mapToInt(o -> o.isBuy() ? 1 : 0)
-											.sum()
-									+ bmIdStopOrders.values()
-											.stream()
-											.mapToInt(o -> o.isBuy() ? 1 : 0)
-											.sum();
+								= bmIdWorkingOrders.values()
+									.stream()
+									.mapToInt(o -> o.isBuy() ? 1 : 0)
+									.sum()
+								+ bmIdStopOrders.values()
+									.stream()
+									.mapToInt(o -> o.isBuy() ? 1 : 0)
+									.sum();
 							workingSells = bmIdWorkingOrders.size() + bmIdStopOrders.size() - workingBuys;
 							log.info("Working Buys: " + workingBuys);
 							log.info("Working Sells: " + workingSells);
@@ -498,20 +499,20 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 					if (fetchInfos.contains(FetchInfo.Positions)) {
 						PositionRequestResponse positionRequestResponse = getConnector().fetchPosition(
-								PositionRequest.builder()
-										.symbol(instrPair)
-										.expiration(expiration)
-										.build()
+							PositionRequest.builder()
+								.symbol(instrPair)
+								.expiration(expiration)
+								.build()
 						);
 
 						if (!positionRequestResponse.result) {
 							adminListeners
-									.forEach(
-											l -> l.onSystemTextMessage(
-													"Could not get latest status info from OKEX",
-													SystemTextMessageType.UNCLASSIFIED
-											)
-									);
+								.forEach(
+									l -> l.onSystemTextMessage(
+										"Could not get latest status info from OKEX",
+										SystemTextMessageType.UNCLASSIFIED
+									)
+								);
 							return;
 						}
 
@@ -525,12 +526,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 							log.info("sellAmount: " + p.sellAmount);
 							position = p.buyAmount - p.sellAmount;
 							avePrice
-									= (p.buyAmount * p.buyPriceAvg + p.sellAmount * p.sellPriceAvg)
-									/ (p.buyAmount + p.sellAmount);
+								= (p.buyAmount * p.buyPriceAvg + p.sellAmount * p.sellPriceAvg)
+								/ (p.buyAmount + p.sellAmount);
 
 							if (p.buyAmount != 0 && p.sellAmount != 0) {
 								log.info("We have both long and short position.  We will close"
-										+ " positions until we have only one direction");
+									+ " positions until we have only one direction");
 								//We need to maintain only one direction according to Paul of Bookmap
 								//This will result to orphaned stop orders and limit orders.
 								int amountToClose = Math.min(p.buyAmount, p.sellAmount);
@@ -538,19 +539,19 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 								SimpleOrderSendParametersBuilder(java.lang.String alias, boolean isBuy, int size, OrderDuration duration, java.lang.String clientId, double limitPrice, double stopPrice, int takeProfitOffset, int stopLossOffset, int stopLossTrailingStep, int trailingStep, boolean doNotIncrease, double sizeMultiplier) 
 								 */
 								SimpleOrderSendParametersBuilder closeParams = new SimpleOrderSendParametersBuilder(
-										alias,
-										true,
-										amountToClose,
-										OrderDuration.GTC,
-										null,
-										Double.NaN,
-										Double.NaN,
-										0,
-										0,
-										0,
-										0,
-										true,
-										1.0
+									alias,
+									true,
+									amountToClose,
+									OrderDuration.GTC,
+									null,
+									Double.NaN,
+									Double.NaN,
+									0,
+									0,
+									0,
+									0,
+									true,
+									1.0
 								);
 								sendOrder(closeParams.build());
 								closeParams.setBuy(false);
@@ -560,15 +561,15 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					}
 
 					StatusInfo newStatusInfo = new StatusInfo(
-							alias,
-							unrealizedPnl,
-							realizedPnl,
-							DEFAULT_CURRENCY,
-							position,
-							avePrice,
-							_volume,
-							workingBuys,
-							workingSells
+						alias,
+						unrealizedPnl,
+						realizedPnl,
+						DEFAULT_CURRENCY,
+						position,
+						avePrice,
+						_volume,
+						workingBuys,
+						workingSells
 					);
 					aliasStatusInfos.put(alias, newStatusInfo);
 
@@ -585,7 +586,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	private Optional<List<OrderInfo>> fetchOrdersInfo(String instrPair, Expiration expiration) {
 		OrderInfoResponse fetchOrdersInfo = getConnector().fetchOrdersInfo(
-				OrderInfoRequest.builder().symbol(instrPair).expiration(expiration).build()
+			OrderInfoRequest.builder().symbol(instrPair).expiration(expiration).build()
 		);
 		if (!fetchOrdersInfo.result) {
 			return Optional.empty();
@@ -600,12 +601,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			return Optional.empty();
 		}
 		Optional<Contract> contract = userInfoResponse.info
-				.getSymbolsInfo()
-				.get(symbol.toLowerCase())
-				.getContracts()
-				.stream()
-				.filter(c -> c.getContractType().equalsIgnoreCase(expiration.name()))
-				.findFirst();
+			.getSymbolsInfo()
+			.get(symbol.toLowerCase())
+			.getContracts()
+			.stream()
+			.filter(c -> c.getContractType().equalsIgnoreCase(expiration.name()))
+			.findFirst();
 		return contract;
 	}
 
@@ -649,12 +650,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					 */
 					String execId = UUID.randomUUID().toString();
 					ExecutionInfoBuilder executionInfoBuilder = new ExecutionInfoBuilder(
-							wOrder.getOrderId(),
-							wOrder.getFilled(),
-							wOrder.getAverageFillPrice(),
-							execId,
-							System.currentTimeMillis(),
-							false
+						wOrder.getOrderId(),
+						wOrder.getFilled(),
+						wOrder.getAverageFillPrice(),
+						execId,
+						System.currentTimeMillis(),
+						false
 					);
 					tradingListeners.forEach(l -> l.onOrderExecuted(executionInfoBuilder.build()));
 
@@ -686,37 +687,37 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	@Override
 	protected void onPositionsFixedMargin(PositionsFixedMargin positions) {
 		positions.getPositions()
-				.stream()
-				.filter(p -> p.holdAmount > 0)
-				.forEach(p -> {
-					Object[] extracts = extractSymbolAndExpiration(p.getContractName());
-					String symbol = (String) extracts[0];
-					Expiration expiration = (Expiration) extracts[1];
-					synchronized (fetchInfos) {
-						log.info("On positions fixed margin");
-						fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
-					}
-					sendStatusInfo(symbol, expiration);
-				});
+			.stream()
+			.filter(p -> p.holdAmount > 0)
+			.forEach(p -> {
+				Object[] extracts = extractSymbolAndExpiration(p.getContractName());
+				String symbol = (String) extracts[0];
+				Expiration expiration = (Expiration) extracts[1];
+				synchronized (fetchInfos) {
+					log.info("On positions fixed margin");
+					fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
+				}
+				sendStatusInfo(symbol, expiration);
+			});
 	}
 
 	@Override
 	protected void onContractsFixedMargin(Contracts contracts) {
 		contracts.contracts
-				.forEach(c -> {
-					String cId = String.valueOf(c.contractId);
-					int year = Integer.valueOf(cId.substring(0, 4));
-					int month = Integer.valueOf(cId.substring(4, 6));
-					int day = Integer.valueOf(cId.substring(6, 8));
-					LocalDate expiry = LocalDate.of(year, month, day);
-					Expiration expiration = determineExpiration(expiry);
-					synchronized (fetchInfos) {
-						log.info("On contracts fixed margin");
-						fetchInfos.addAll(EnumSet.of(FetchInfo.Contracts));
-					}
+			.forEach(c -> {
+				String cId = String.valueOf(c.contractId);
+				int year = Integer.valueOf(cId.substring(0, 4));
+				int month = Integer.valueOf(cId.substring(4, 6));
+				int day = Integer.valueOf(cId.substring(6, 8));
+				LocalDate expiry = LocalDate.of(year, month, day);
+				Expiration expiration = determineExpiration(expiry);
+				synchronized (fetchInfos) {
+					log.info("On contracts fixed margin");
+					fetchInfos.addAll(EnumSet.of(FetchInfo.Contracts));
+				}
 
-					sendStatusInfo(contracts.symbol.split("_")[0], expiration);
-				});
+				sendStatusInfo(contracts.symbol.split("_")[0], expiration);
+			});
 	}
 
 	private Expiration determineExpiration(LocalDate expiry) {
@@ -812,18 +813,18 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	private OrderInfoBuilder createWorkingOrderInfoBuilder(String alias, String bmId, boolean isBuy, double price, int amount) {
 		final OrderInfoBuilder builder = new OrderInfoBuilder(
-				alias,
-				bmId,
-				isBuy,
-				OrderType.LMT,//Okex only supports LMT orders
-				null,//Client ID can be null if coming from exchange
-				false//We set this to false since we shouldn't worry about it in L0 according to ducumentation
+			alias,
+			bmId,
+			isBuy,
+			OrderType.LMT,//Okex only supports LMT orders
+			null,//Client ID can be null if coming from exchange
+			false//We set this to false since we shouldn't worry about it in L0 according to ducumentation
 		);
 		builder.setStopPrice(0.0)
-				.setLimitPrice(price)
-				.setUnfilled(amount)
-				.setDuration(OrderDuration.GTC)
-				.setStatus(OrderStatus.WORKING);
+			.setLimitPrice(price)
+			.setUnfilled(amount)
+			.setDuration(OrderDuration.GTC)
+			.setStatus(OrderStatus.WORKING);
 		return builder;
 	}
 
