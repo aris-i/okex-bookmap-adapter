@@ -12,6 +12,7 @@ import com.stableapps.okexbookmapadapter.okex.model.MarketPrice;
 import com.stableapps.okexbookmapadapter.okex.model.Order;
 import com.stableapps.okexbookmapadapter.okex.model.PositionsFixedMargin;
 import com.stableapps.okexbookmapadapter.okex.model.Trade;
+import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +32,7 @@ import velox.api.layer1.data.OrderSendParameters;
 import velox.api.layer1.data.OrderUpdateParameters;
 import velox.api.layer1.data.TradeInfo;
 import velox.api.layer1.data.UserPasswordDemoLoginData;
+import velox.api.layer1.layers.utils.OrderByOrderBook;
 
 /**
  * This provides real time data from OKEX.
@@ -42,8 +44,8 @@ import velox.api.layer1.data.UserPasswordDemoLoginData;
 public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 	private static final String INVALID_USERNAME_PASSWORD = "Please provide "
-			+ "apiKey::leverage::priceGranularity for username and secretKey for"
-			+ " password";
+		+ "apiKey::leverage::priceGranularity for username and secretKey for"
+		+ " password";
 
 	public static final int DEFAULT_MARKET_DEPTH_AMOUNT = 20;
 
@@ -97,7 +99,7 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 				aliasInstruments.put(alias, instrument);
 
 				final InstrumentInfo instrumentInfo = new InstrumentInfo(
-						symbol, exchange, type, instrument.pips, 1, "", true);
+					symbol, exchange, type, instrument.pips, 1, "", true);
 
 				log.log(Level.INFO, "Now subscribed to " + alias);
 				instrumentListeners.forEach(l -> l.onInstrumentAdded(alias, instrumentInfo));
@@ -107,8 +109,8 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 	protected boolean subscribe(String symbol, Expiration expiration) {
 		return getConnector().subscribeContractMarketDepthIncremental(symbol.toLowerCase(), expiration)
-				&& getConnector().subscribeContractMarketPrice(symbol.toLowerCase(), expiration)
-				&& getConnector().subscribeContractTradeRecord(symbol.toLowerCase(), expiration);
+			&& getConnector().subscribeContractMarketPrice(symbol.toLowerCase(), expiration)
+			&& getConnector().subscribeContractTradeRecord(symbol.toLowerCase(), expiration);
 	}
 
 	protected Object[] splitToSymbolAndExpiration(String alias) {
@@ -174,8 +176,8 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 		} catch (Exception e) {
 			log.warn("Could not login.", e);
 			adminListeners.forEach(l -> l.onLoginFailed(
-					LoginFailedReason.WRONG_CREDENTIALS,
-					INVALID_USERNAME_PASSWORD)
+				LoginFailedReason.WRONG_CREDENTIALS,
+				INVALID_USERNAME_PASSWORD)
 			);
 			return;
 		}
@@ -201,8 +203,8 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			// Report failed login
 			log.log(Level.INFO, "Login to OKEX failed");
 			adminListeners.forEach(l -> l.onLoginFailed(
-					LoginFailedReason.WRONG_CREDENTIALS,
-					INVALID_USERNAME_PASSWORD)
+				LoginFailedReason.WRONG_CREDENTIALS,
+				INVALID_USERNAME_PASSWORD)
 			);
 		}
 
@@ -255,6 +257,10 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 	private class OkexClient extends AbstractClient {
 
+		private final DecimalFormat df = new DecimalFormat(".##");
+		private final OrderByOrderBook orderBook = new OrderByOrderBook();
+		private static final double OKEX_TICK_SIZE = 0.01;
+
 		@Override
 		public void onMarketPrice(String symbol, Expiration expiration, MarketPrice marketPrice) {
 			String alias = createAlias(symbol, expiration);
@@ -265,12 +271,12 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			}
 			log.debug("New market price data received for " + alias);
 			log.debug("Sell: " + (int) (Double.valueOf(marketPrice.getSell()) / priceGranularity)
-					+ ", Buy: " + (int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity));
+				+ ", Buy: " + (int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity));
 			assert Double.valueOf(marketPrice.getSell()) < Double.valueOf(marketPrice.getBuy());
 			dataListeners.forEach(l -> l.onDepth(alias, true,
-					(int) (Double.valueOf(marketPrice.getSell()) / priceGranularity), 0));
+				(int) (Double.valueOf(marketPrice.getSell()) / priceGranularity), 0));
 			dataListeners.forEach(l -> l.onDepth(alias, false,
-					(int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity), 0));
+				(int) (Double.valueOf(marketPrice.getBuy()) / priceGranularity), 0));
 
 			OkexRealTimeProvider.this.onMarketPrice(symbol, expiration, marketPrice);
 		}
@@ -283,21 +289,44 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 		@Override
 		public void onMarketDepth(String symbol, Expiration expiration, MarketDepths marketDepths) {
 			String alias = createAlias(symbol.toUpperCase(), expiration);
-			log.debug("New market depth data received for " + alias);
+			log.debug("#########New market depth data received for " + alias);
 			log.debug(marketDepths);
 			marketDepths.getAskDatas().forEach(askData -> {
-				log.log(Level.DEBUG, "Ask: " + (int) (askData.getPrice() / priceGranularity) + ", amount: "
-						+ (int) askData.getContractAmount());
-				dataListeners.forEach(l -> l.onDepth(alias, false,
-						(int) (askData.getPrice() / priceGranularity), (int) askData.getContractAmount()));
+				log.debug("Ask: " + df.format(askData.getPrice()) + ", amount: "
+					+ (int) askData.getContractAmount());
+
+				long id = Math.round(askData.getPrice() / OKEX_TICK_SIZE);
+				int size = (int)Math.round(askData.getContractAmount());
+				int price = (int) Math.round(askData.getPrice() / priceGranularity);
+				boolean isBid = false;
+				updateOrderBook(alias, id, price, size, isBid);
 			});
 			marketDepths.getBidDatas().forEach(bidData -> {
-				log.log(Level.DEBUG, "Bid: " + (int) (bidData.getPrice() / priceGranularity) + ", amount: "
-						+ (int) bidData.getContractAmount());
-				dataListeners.forEach(l -> l.onDepth(alias, true,
-						(int) (bidData.getPrice() / priceGranularity), (int) bidData.getContractAmount()));
+				log.debug("Bid: " + df.format(bidData.getPrice()) + ", amount: "
+					+ (int) bidData.getContractAmount());
+				long id = Math.round(bidData.getPrice() / OKEX_TICK_SIZE);
+				int size = (int)Math.round(bidData.getContractAmount());
+				int price = (int) Math.round(bidData.getPrice() / priceGranularity);
+				boolean isBid = true;
+				updateOrderBook(alias, id, price, size, isBid);
 			});
+			log.debug("####################################################");
 
+		}
+
+		private void updateOrderBook(String alias, long id, int price, int size, boolean isBid) throws IllegalArgumentException {
+			if (orderBook.hasOrder(id)) {
+				if (size == 0) {
+					long newSize = orderBook.removeOrder(id);
+					dataListeners.forEach(l -> l.onDepth(alias, isBid, price, (int)newSize));
+				} else {
+					OrderByOrderBook.OrderUpdateResult updateOrder = orderBook.updateOrder(id, price, size);
+					dataListeners.forEach(l -> l.onDepth(alias, isBid, price, (int)updateOrder.toSize));
+				}
+			} else {
+				long newSize = orderBook.addOrder(id, isBid, price, size);
+				dataListeners.forEach(l -> l.onDepth(alias, isBid, price, (int)newSize));
+			}
 		}
 
 		@Override
@@ -305,15 +334,15 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			String alias = createAlias(symbol.toUpperCase(), expiration);
 			log.debug("Trade Record Received");
 			log.debug("TR Details: " + tradeRecord.getType() + ", "
-					+ tradeRecord.getPrice() + ", " + tradeRecord.getAmount());
+				+ tradeRecord.getPrice() + ", " + tradeRecord.getAmount());
 			boolean isBidAggressor = tradeRecord.getType().equals("ask") ? true : false;
 			boolean isOtc = false;
 			if (isBidAggressor) {
 				dataListeners.forEach(l -> l.onTrade(alias, tradeRecord.getPrice() / priceGranularity,
-						(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
+					(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
 			} else {
 				dataListeners.forEach(l -> l.onTrade(alias, tradeRecord.getPrice() / priceGranularity,
-						(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
+					(int) tradeRecord.getAmount(), new TradeInfo(isOtc, isBidAggressor)));
 			}
 
 		}
