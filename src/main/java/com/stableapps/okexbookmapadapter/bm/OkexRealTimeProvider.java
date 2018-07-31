@@ -336,7 +336,7 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 			log.debug("Trade Record Received");
 			log.debug("TR Details: " + tradeRecord.getType() + ", "
 				+ tradeRecord.getPrice() + ", " + tradeRecord.getAmount());
-			boolean isBidAggressor = tradeRecord.getType().equals("ask") ? true : false;
+			boolean isBidAggressor = tradeRecord.getType().equals("ask") ? false : true;
 			boolean isOtc = false;
 			if (isBidAggressor) {
 				dataListeners.forEach(l -> l.onTrade(alias, tradeRecord.getPrice() / priceGranularity,

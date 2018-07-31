@@ -217,11 +217,18 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			= orderType == OrderType.LMT
 				? MatchPrice.No
 				: MatchPrice.Yes;
+		log.info("MatchPrice: " + matchPrice);
 
 		int amount = simpleParameters.size;
 		double price = simpleParameters.limitPrice;
-		OkexOrderType okexOrderType = determineOkexOrderType(orderType, simpleParameters.isBuy);
-		log.info("OkexOrderType: " + orderType);
+		int position = 0;
+		StatusInfo statusInfo = aliasStatusInfos.get(simpleParameters.alias);
+		if (statusInfo != null) {
+			position = statusInfo.position;
+		}
+		OkexOrderType okexOrderType = determineOkexOrderType(orderType,
+			simpleParameters.isBuy, position);
+		log.info("OkexOrderType: " + okexOrderType);
 		sendOrder(symbol, expiration, okexOrderType, amount, matchPrice, price,
 			orderInfo);
 	}
@@ -278,16 +285,27 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		});
 	}
 
-	private OkexOrderType determineOkexOrderType(OrderType orderType, boolean buy) {
+	private OkexOrderType determineOkexOrderType(OrderType orderType, boolean buy,
+		int position) {
 		switch (orderType) {
 			case LMT:
 				return buy
 					? OkexOrderType.OpenLongPosition
 					: OkexOrderType.OpenShortPosition;
 			case MKT:
-				return buy
-					? OkexOrderType.CloseShortPosition
-					: OkexOrderType.CloseLongPosition;
+				if (position > 0) {
+					return buy
+						? OkexOrderType.OpenLongPosition
+						: OkexOrderType.CloseLongPosition;
+				} else if (position < 0) {
+					return !buy
+						? OkexOrderType.OpenShortPosition
+						: OkexOrderType.CloseShortPosition;
+				} else {
+					return buy
+						? OkexOrderType.OpenLongPosition
+						: OkexOrderType.OpenShortPosition;
+				}
 			default:
 				String message = "No supported order type: " + orderType;
 				log.warn(message);
@@ -397,8 +415,8 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 		sendStatusInfoFuture = singleThreadScheduledExecutor.schedule(() -> {
 			synchronized (aliasInstruments) {
-				log.info("We are not subscribed to this: " + alias + " No need to send status update");
 				if (!aliasInstruments.containsKey(alias)) {
+					log.info("We are not subscribed to this: " + alias + " No need to send status update");
 					return;
 				}
 			}
@@ -721,9 +739,9 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	}
 
 	private Expiration determineExpiration(LocalDate expiry) {
-		log.info("Determine Expiration: " + expiry);
+		log.debug("Determine Expiration: " + expiry);
 		Expiration expiration;
-		log.info("WEEKS BETWEEN: " + ChronoUnit.WEEKS.between(LocalDate.now(), expiry));
+		log.debug("WEEKS BETWEEN: " + ChronoUnit.WEEKS.between(LocalDate.now(), expiry));
 		switch ((int) ChronoUnit.WEEKS.between(LocalDate.now(), expiry)) {
 			case 0:
 				expiration = Expiration.this_week;
@@ -734,7 +752,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			default:
 				expiration = Expiration.quarter;
 		}
-		log.info("Expiration: " + expiration);
+		log.debug("Expiration: " + expiration);
 		return expiration;
 	}
 
