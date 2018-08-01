@@ -64,7 +64,7 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 
 	public OkexRealTimeProvider() {
 		DOMConfigurator.configure(getClass().getResource("/log4j.xml"));
-		log.info( "Current Adapter Version:  0.2-3");
+		log.info( "Current Adapter Version:  0.2-4");
 		aliasInstruments = new HashMap<>();
 		singleThreadExecutor = Executors.newSingleThreadExecutor();
 		singleThreadScheduledExecutor = Executors.newSingleThreadScheduledExecutor();

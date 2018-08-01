@@ -14,7 +14,7 @@
 		</filter>
 	</appender>
 	<!-- Error Log File Appender -->
-	<appender name="okex-log" class="org.apache.log4j.FileAppender">
+	<appender name="okex-log" class="org.apache.log4j.RollingFileAppender">
 		<param name="Append" value="true"/>
 		<param name="File" value="okex.log"/>
 		<layout class="org.apache.log4j.PatternLayout">

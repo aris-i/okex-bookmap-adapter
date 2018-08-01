@@ -64,6 +64,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		Contracts, Positions, Orders;
 	}
 
+	private static final String ONE_DIR_CLOSE_CLIENT_ID = "OneDirectionCloseClientID";
 	private static boolean RUN_MAIN = false;
 	private static final String DEFAULT_CURRENCY = "usd";
 	public static final EnumSet<OkexOrderType> LONG_ORDER_TYPES
@@ -98,6 +99,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	@Override
 	protected void onMarketPrice(String symbol, Expiration expiration, MarketPrice marketPrice) {
+		log.debug("+++Enter synchronize");
 		synchronized (bmIdStopOrders) {
 			ArrayList<String> forRemoval = new ArrayList<>();
 			String alias = createAlias(symbol, expiration);
@@ -110,39 +112,44 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					if (stopOrder.isBuy()) {
 						if (stopOrder.getStopPrice() < Double.valueOf(marketPrice.getBuy())) {
 							//Convert this to market stopOrder and submit
-							synchronized (aliasStatusInfos) {
-								log.info("Buy Stop Order Triggered");
-								StatusInfo statusInfo = aliasStatusInfos.get(alias);
-								forRemoval.add(bmId);
-								stopOrder.setType(OrderType.MKT);
-								OkexOrderType orderType
-									= statusInfo.position < 0
-										? OkexOrderType.CloseShortPosition
-										: OkexOrderType.OpenLongPosition;
-								sendOrder(symbol, expiration, orderType,
-									stopOrder.getUnfilled(), MatchPrice.Yes,
-									stopOrder.getStopPrice(), stopOrder);
-							}
+							log.debug("+++Enter synchronize");
+							log.info("Buy Stop Order Triggered");
+							StatusInfo statusInfo = getStatusInfo(alias);
+							forRemoval.add(bmId);
+							stopOrder.setType(OrderType.MKT);
+							OkexOrderType orderType
+								= statusInfo.position < 0
+									? OkexOrderType.CloseShortPosition
+									: OkexOrderType.OpenLongPosition;
+							sendOrder(symbol, expiration, orderType,
+								stopOrder.getUnfilled(), MatchPrice.Yes,
+								stopOrder.getStopPrice(), stopOrder);
 						}
 					} else {
 						if (stopOrder.getStopPrice() > Double.valueOf(marketPrice.getSell())) {
-							synchronized (aliasStatusInfos) {
-								log.info("Sell Stop Order Triggered");
-								StatusInfo statusInfo = aliasStatusInfos.get(alias);
-								forRemoval.add(bmId);
-								stopOrder.setType(OrderType.MKT);
-								OkexOrderType orderType
-									= statusInfo.position > 0
-										? OkexOrderType.CloseLongPosition
-										: OkexOrderType.OpenShortPosition;
-								sendOrder(symbol, expiration, orderType,
-									stopOrder.getUnfilled(), MatchPrice.Yes,
-									stopOrder.getStopPrice(), stopOrder);
-							}
+							log.debug("+++Enter synchronize");
+							log.info("Sell Stop Order Triggered");
+							StatusInfo statusInfo = getStatusInfo(alias);
+							forRemoval.add(bmId);
+							stopOrder.setType(OrderType.MKT);
+							OkexOrderType orderType
+								= statusInfo.position > 0
+									? OkexOrderType.CloseLongPosition
+									: OkexOrderType.OpenShortPosition;
+							sendOrder(symbol, expiration, orderType,
+								stopOrder.getUnfilled(), MatchPrice.Yes,
+								stopOrder.getStopPrice(), stopOrder);
 						}
 					}
 				});
 			forRemoval.forEach(bmIdStopOrders::remove);
+		}
+		log.debug("---Exit synchronize");
+	}
+
+	private StatusInfo getStatusInfo(String alias) {
+		synchronized (aliasStatusInfos) {
+			return aliasStatusInfos.get(alias);
 		}
 	}
 
@@ -179,7 +186,8 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			bmId,
 			simpleParameters.isBuy,
 			orderType,
-			simpleParameters.clientId,
+			simpleParameters.clientId.equals(ONE_DIR_CLOSE_CLIENT_ID) ?
+				null : simpleParameters.clientId,
 			simpleParameters.doNotIncrease);
 
 		log.info("Limit Price: " + simpleParameters.limitPrice);
@@ -222,12 +230,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		int amount = simpleParameters.size;
 		double price = simpleParameters.limitPrice;
 		int position = 0;
-		StatusInfo statusInfo = aliasStatusInfos.get(simpleParameters.alias);
+		StatusInfo statusInfo = getStatusInfo(simpleParameters.alias);
 		if (statusInfo != null) {
 			position = statusInfo.position;
 		}
 		OkexOrderType okexOrderType = determineOkexOrderType(orderType,
-			simpleParameters.isBuy, position);
+			simpleParameters.isBuy, position, simpleParameters.clientId);
 		log.info("OkexOrderType: " + okexOrderType);
 		sendOrder(symbol, expiration, okexOrderType, amount, matchPrice, price,
 			orderInfo);
@@ -235,6 +243,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	private void trackStopOrder(final OrderInfoBuilder orderInfo, String symbol, Expiration expiration) {
 		//Since OKEX does not support stop order.  We will have to manually track stop order.
+		log.debug("+++Enter synchronize");
 		synchronized (bmIdStopOrders) {
 			orderInfo.setStatus(OrderStatus.WORKING);
 			tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
@@ -244,12 +253,14 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			orderInfo.markAllUnchanged();
 			sendStatusInfo(symbol, expiration);
 		}
+		log.debug("---Exit synchronize");
 	}
 
 	private void sendOrder(String symbol, Expiration expiration, OkexOrderType orderType, int amount,
 		MatchPrice matchPrice, double price, final OrderInfoBuilder orderInfo) {
 
 		singleThreadExecutor.submit(() -> {
+			log.debug("+++Enter synchronize");
 			synchronized (bmIdWorkingOrders) {
 				PlaceOrderResponse orderResponse = getConnector().placeOrder(PlaceOrderRequest
 					.builder()
@@ -282,29 +293,34 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 				bmOkexIds.put(orderInfo.getOrderId(), orderResponse.getOrderId());
 				bmIdWorkingOrders.put(orderInfo.getOrderId(), orderInfo);
 			}
+			log.debug("---Exit synchronize");
 		});
 	}
 
 	private OkexOrderType determineOkexOrderType(OrderType orderType, boolean buy,
-		int position) {
+		int position, String clientId) {
 		switch (orderType) {
 			case LMT:
 				return buy
 					? OkexOrderType.OpenLongPosition
 					: OkexOrderType.OpenShortPosition;
 			case MKT:
-				if (position > 0) {
-					return buy
-						? OkexOrderType.OpenLongPosition
-						: OkexOrderType.CloseLongPosition;
+				if (clientId != null && clientId.equals(ONE_DIR_CLOSE_CLIENT_ID)){
+					return buy? 
+						OkexOrderType.CloseShortPosition: 
+						OkexOrderType.CloseLongPosition;
+				}else if (position > 0) {
+					return buy?
+						OkexOrderType.OpenLongPosition:
+						OkexOrderType.CloseLongPosition;
 				} else if (position < 0) {
-					return !buy
-						? OkexOrderType.OpenShortPosition
-						: OkexOrderType.CloseShortPosition;
+					return !buy?
+						OkexOrderType.OpenShortPosition:
+						OkexOrderType.CloseShortPosition;
 				} else {
-					return buy
-						? OkexOrderType.OpenLongPosition
-						: OkexOrderType.OpenShortPosition;
+					return buy?
+						OkexOrderType.OpenLongPosition:
+						OkexOrderType.OpenShortPosition;
 				}
 			default:
 				String message = "No supported order type: " + orderType;
@@ -316,6 +332,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	@Override
 	public void updateOrder(OrderUpdateParameters orderUpdateParameters) {
 		if (orderUpdateParameters.getClass() == OrderCancelParameters.class) {
+			log.debug("+++Enter synchronize");
 			synchronized (bmIdWorkingOrders) {
 				log.info("Cancel order with provided ID: " + orderUpdateParameters.orderId);
 				OrderCancelParameters orderCancelParameters = (OrderCancelParameters) orderUpdateParameters;
@@ -334,6 +351,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 				Long okexId = bmOkexIds.get(orderCancelParameters.orderId);
 				sendCancelOrder(okexId, symbol, expiration);
 			}
+			log.debug("---Exit synchronize");
 		} else {
 			log.error("Unsupported order update parameter: " + orderUpdateParameters.getClass().getSimpleName());
 			adminListeners
@@ -347,6 +365,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	}
 
 	private void cancelStopOrder(String orderId) {
+		log.debug("+++Enter synchronize");
 		synchronized (bmIdStopOrders) {
 			Optional<OrderInfoBuilder> wOrder = bmIdStopOrders
 				.values()
@@ -370,6 +389,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			Expiration expiration = (Expiration) splits[1];
 			sendStatusInfo(symbol, expiration);
 		}
+		log.debug("---Exit synchronize");
 	}
 
 	private void sendCancelOrder(Long okexId, String symbol, Expiration expiration) {
@@ -414,192 +434,212 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 		}
 
 		sendStatusInfoFuture = singleThreadScheduledExecutor.schedule(() -> {
+			log.debug("+++Enter synchronize");
 			synchronized (aliasInstruments) {
 				if (!aliasInstruments.containsKey(alias)) {
 					log.info("We are not subscribed to this: " + alias + " No need to send status update");
 					return;
 				}
 			}
+			log.debug("---Exit synchronize");
 
-			synchronized (aliasStatusInfos) {
-				synchronized (fetchInfos) {
-					log.info("Sending Status Info");
-					log.info("FetchInfos: " + fetchInfos);
-					log.info("symbol: " + symbol + ", expiration: " + expiration);
-					StatusInfo statusInfo = aliasStatusInfos.get(alias);
-					String instrPair = symbol.toLowerCase() + "_" + DEFAULT_CURRENCY;
+			EnumSet<FetchInfo> currFetchInfos = getCurrFetchInfos();
+			log.info("Sending Status Info");
+			log.info("CurrFetchInfos: " + currFetchInfos);
+			log.info("symbol: " + symbol + ", expiration: " + expiration);
+			StatusInfo statusInfo = getStatusInfo(alias);
+			String instrPair = symbol.toLowerCase() + "_" + DEFAULT_CURRENCY;
 
-					//Contracts ##################################################
-					double realizedPnl = 0.0;
-					double unrealizedPnl = 0.0;
+			//Contracts ##################################################
+			double realizedPnl = 0.0;
+			double unrealizedPnl = 0.0;
 
-					if (statusInfo != null) {
-						realizedPnl = statusInfo.realizedPnl;
-						unrealizedPnl = statusInfo.unrealizedPnl;
-					}
+			if (statusInfo != null) {
+				realizedPnl = statusInfo.realizedPnl;
+				unrealizedPnl = statusInfo.unrealizedPnl;
+			}
 
-					if (fetchInfos.contains(FetchInfo.Contracts)) {
-						Optional<Contract> contract = fetchContractInfo(symbol, expiration);
-						if (!contract.isPresent()) {
-							log.warn("Could not get latest status info from OKEX");
-							adminListeners
-								.forEach(
-									l -> l.onSystemTextMessage(
-										"Could not get latest status info from OKEX",
-										SystemTextMessageType.UNCLASSIFIED
-									)
-								);
-							return;
-						}
-						MarketPrice marketPrice = fetchLatestMarketPrice(symbol, expiration);
-						log.info("Market Price: " + marketPrice);
-
-						realizedPnl = contract.get().profit * Double.valueOf(marketPrice.getSell());
-						unrealizedPnl = contract.get().unprofit * Double.valueOf(marketPrice.getSell());
-					}
-
-					//Orders ##################################################
-					Optional<List<OrderInfo>> fetchOrdersInfo = Optional.empty();
-					if (fetchInfos.contains(FetchInfo.Orders)) {
-						fetchOrdersInfo = fetchOrdersInfo(instrPair, expiration);
-
-						if (!fetchOrdersInfo.isPresent()) {
-							log.warn("Could not get latest status info from OKEX");
-							adminListeners
-								.forEach(
-									l -> l.onSystemTextMessage(
-										"Could not get latest status info from OKEX",
-										SystemTextMessageType.UNCLASSIFIED
-									)
-								);
-							return;
-						}
-
-					}
-
-					int workingBuys = 0;
-					int workingSells = 0;
-
-					synchronized (bmIdWorkingOrders) {
-						synchronized (bmIdStopOrders) {
-							if (fetchOrdersInfo.isPresent()) {
-								fetchOrdersInfo.get().forEach(o -> {
-									Optional<String> bmId = Optional.ofNullable(okexBmIds.get(o.getOrderId()));
-									if (!bmId.isPresent()) {
-										trackWorkingOrder(o);
-									}
-								});
-							}
-
-							workingBuys
-								= bmIdWorkingOrders.values()
-									.stream()
-									.mapToInt(o -> o.isBuy() ? 1 : 0)
-									.sum()
-								+ bmIdStopOrders.values()
-									.stream()
-									.mapToInt(o -> o.isBuy() ? 1 : 0)
-									.sum();
-							workingSells = bmIdWorkingOrders.size() + bmIdStopOrders.size() - workingBuys;
-							log.info("Working Buys: " + workingBuys);
-							log.info("Working Sells: " + workingSells);
-						}
-					}
-
-					//Positions ##################################################
-					int position = 0;
-					double avePrice = 0;
-
-					if (statusInfo != null) {
-						position = statusInfo.position;
-						avePrice = statusInfo.averagePrice;
-					}
-
-					if (fetchInfos.contains(FetchInfo.Positions)) {
-						PositionRequestResponse positionRequestResponse = getConnector().fetchPosition(
-							PositionRequest.builder()
-								.symbol(instrPair)
-								.expiration(expiration)
-								.build()
+			if (currFetchInfos.contains(FetchInfo.Contracts)) {
+				Optional<Contract> contract = fetchContractInfo(symbol, expiration);
+				if (!contract.isPresent()) {
+					log.warn("Could not get latest status info from OKEX");
+					adminListeners
+						.forEach(
+							l -> l.onSystemTextMessage(
+								"Could not get latest status info from OKEX",
+								SystemTextMessageType.UNCLASSIFIED
+							)
 						);
+					return;
+				}
+				MarketPrice marketPrice = fetchLatestMarketPrice(symbol, expiration);
+				log.info("Market Price: " + marketPrice);
 
-						if (!positionRequestResponse.result) {
-							adminListeners
-								.forEach(
-									l -> l.onSystemTextMessage(
-										"Could not get latest status info from OKEX",
-										SystemTextMessageType.UNCLASSIFIED
-									)
-								);
-							return;
-						}
+				realizedPnl = contract.get().profit * Double.valueOf(marketPrice.getSell());
+				unrealizedPnl = contract.get().unprofit * Double.valueOf(marketPrice.getSell());
+			}
 
-						if (positionRequestResponse.getHolding().isEmpty()) {
-							position = 0;
-							avePrice = 0;
-						} else {
-							//Okex always return only 1 holding
-							Position p = positionRequestResponse.getHolding().get(0);
-							log.info("buyAmount: " + p.buyAmount);
-							log.info("sellAmount: " + p.sellAmount);
-							position = p.buyAmount - p.sellAmount;
-							avePrice
-								= (p.buyAmount * p.buyPriceAvg + p.sellAmount * p.sellPriceAvg)
-								/ (p.buyAmount + p.sellAmount);
+			//Orders ##################################################
+			Optional<List<OrderInfo>> fetchOrdersInfo = Optional.empty();
+			if (currFetchInfos.contains(FetchInfo.Orders)) {
+				fetchOrdersInfo = fetchOrdersInfo(instrPair, expiration);
 
-							if (p.buyAmount != 0 && p.sellAmount != 0) {
-								log.info("We have both long and short position.  We will close"
-									+ " positions until we have only one direction");
-								//We need to maintain only one direction according to Paul of Bookmap
-								//This will result to orphaned stop orders and limit orders.
-								int amountToClose = Math.min(p.buyAmount, p.sellAmount);
-								/*
-								SimpleOrderSendParametersBuilder(java.lang.String alias, boolean isBuy, int size, OrderDuration duration, java.lang.String clientId, double limitPrice, double stopPrice, int takeProfitOffset, int stopLossOffset, int stopLossTrailingStep, int trailingStep, boolean doNotIncrease, double sizeMultiplier) 
-								 */
-								SimpleOrderSendParametersBuilder closeParams = new SimpleOrderSendParametersBuilder(
-									alias,
-									true,
-									amountToClose,
-									OrderDuration.GTC,
-									null,
-									Double.NaN,
-									Double.NaN,
-									0,
-									0,
-									0,
-									0,
-									true,
-									1.0
-								);
-								sendOrder(closeParams.build());
-								closeParams.setBuy(false);
-								sendOrder(closeParams.build());
+				if (!fetchOrdersInfo.isPresent()) {
+					log.warn("Could not get latest status info from OKEX");
+					adminListeners
+						.forEach(
+							l -> l.onSystemTextMessage(
+								"Could not get latest status info from OKEX",
+								SystemTextMessageType.UNCLASSIFIED
+							)
+						);
+					return;
+				}
+
+			}
+
+			int workingBuys = 0;
+			int workingSells = 0;
+
+			log.debug("+++Enter synchronize");
+			synchronized (bmIdWorkingOrders) {
+				log.debug("+++Enter synchronize");
+				synchronized (bmIdStopOrders) {
+					if (fetchOrdersInfo.isPresent()) {
+						fetchOrdersInfo.get().forEach(o -> {
+							Optional<String> bmId = Optional.ofNullable(okexBmIds.get(o.getOrderId()));
+							if (!bmId.isPresent()) {
+								trackWorkingOrder(o);
 							}
-						}
+						});
 					}
 
-					StatusInfo newStatusInfo = new StatusInfo(
-						alias,
-						unrealizedPnl,
-						realizedPnl,
-						DEFAULT_CURRENCY,
-						position,
-						avePrice,
-						_volume,
-						workingBuys,
-						workingSells
-					);
-					aliasStatusInfos.put(alias, newStatusInfo);
-
-					log.info("New Status Info: " + newStatusInfo);
-
-					tradingListeners.forEach(l -> l.onStatus(newStatusInfo));
-					fetchInfos.clear();
-					log.info("Done Sending Status Info");
+					workingBuys
+						= bmIdWorkingOrders.values()
+							.stream()
+							.mapToInt(o -> o.isBuy() ? 1 : 0)
+							.sum()
+						+ bmIdStopOrders.values()
+							.stream()
+							.mapToInt(o -> o.isBuy() ? 1 : 0)
+							.sum();
+					workingSells = bmIdWorkingOrders.size() + bmIdStopOrders.size() - workingBuys;
+					log.info("Working Buys: " + workingBuys);
+					log.info("Working Sells: " + workingSells);
 				}
 			}
+
+			//Positions ##################################################
+			int position = 0;
+			double avePrice = 0;
+
+			if (statusInfo != null) {
+				position = statusInfo.position;
+				avePrice = statusInfo.averagePrice;
+			}
+
+			if (currFetchInfos.contains(FetchInfo.Positions)) {
+				PositionRequestResponse positionRequestResponse = getConnector().fetchPosition(
+					PositionRequest.builder()
+						.symbol(instrPair)
+						.expiration(expiration)
+						.build()
+				);
+
+				if (!positionRequestResponse.result) {
+					adminListeners
+						.forEach(
+							l -> l.onSystemTextMessage(
+								"Could not get latest status info from OKEX",
+								SystemTextMessageType.UNCLASSIFIED
+							)
+						);
+					return;
+				}
+
+				if (positionRequestResponse.getHolding().isEmpty()) {
+					position = 0;
+					avePrice = 0;
+				} else {
+					//Okex always return only 1 holding
+					Position p = positionRequestResponse.getHolding().get(0);
+					log.info("buyAmount: " + p.buyAmount);
+					log.info("sellAmount: " + p.sellAmount);
+					position = p.buyAmount - p.sellAmount;
+					avePrice
+						= (p.buyAmount * p.buyPriceAvg + p.sellAmount * p.sellPriceAvg)
+						/ (p.buyAmount + p.sellAmount);
+
+					if (p.buyAmount != 0 && p.sellAmount != 0) {
+						log.info("We have both long and short position.  We will close"
+							+ " positions until we have only one direction");
+						//We need to maintain only one direction according to Paul of Bookmap
+						//This will result to orphaned stop orders and limit orders.
+						int amountToClose = Math.min(p.buyAmount, p.sellAmount);
+						/*
+								SimpleOrderSendParametersBuilder(java.lang.String alias, boolean isBuy, int size, OrderDuration duration, java.lang.String clientId, double limitPrice, double stopPrice, int takeProfitOffset, int stopLossOffset, int stopLossTrailingStep, int trailingStep, boolean doNotIncrease, double sizeMultiplier) 
+						 */
+						SimpleOrderSendParametersBuilder closeParams = new SimpleOrderSendParametersBuilder(
+							alias,
+							true,
+							amountToClose,
+							OrderDuration.GTC,
+							ONE_DIR_CLOSE_CLIENT_ID,
+							Double.NaN,
+							Double.NaN,
+							0,
+							0,
+							0,
+							0,
+							true,
+							1.0
+						);
+						sendOrder(closeParams.build());
+						closeParams.setBuy(false);
+						sendOrder(closeParams.build());
+					}
+				}
+			}
+
+			StatusInfo newStatusInfo = new StatusInfo(
+				alias,
+				unrealizedPnl,
+				realizedPnl,
+				DEFAULT_CURRENCY,
+				position,
+				avePrice,
+				_volume,
+				workingBuys,
+				workingSells
+			);
+
+			log.debug("+++Enter synchronize");
+			synchronized (aliasStatusInfos) {
+				aliasStatusInfos.put(alias, newStatusInfo);
+			}
+			log.debug("---Exit synchronize");
+
+			log.info("New Status Info: " + newStatusInfo);
+
+			tradingListeners.forEach(l -> l.onStatus(newStatusInfo));
+			log.debug("+++Enter synchronize");
+			synchronized (fetchInfos) {
+				fetchInfos.clear();
+			}
+			log.debug("---Exit synchronize");
+			log.info("Done Sending Status Info");
 		}, 1, TimeUnit.SECONDS);
 		aliasSendStatusInfoFutures.put(alias, sendStatusInfoFuture);
+	}
+
+	private EnumSet<FetchInfo> getCurrFetchInfos() {
+		log.debug("+++Enter synchronize");
+		EnumSet<FetchInfo> currFetchInfos = null;
+		synchronized (fetchInfos) {
+			currFetchInfos = fetchInfos.clone();
+		}
+		log.debug("---Exit synchronize");
+		return currFetchInfos;
 	}
 
 	private Optional<List<OrderInfo>> fetchOrdersInfo(String instrPair, Expiration expiration) {
@@ -630,6 +670,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	@Override
 	protected void onOrder(Order order) {
+		log.debug("+++Enter synchronize");
 		synchronized (bmIdWorkingOrders) {
 			Optional<String> bmId = Optional.ofNullable(okexBmIds.get(order.getOrderId()));
 			log.info("Order Received: " + order.orderId);
@@ -678,6 +719,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					tradingListeners.forEach(l -> l.onOrderExecuted(executionInfoBuilder.build()));
 
 					volume += order.amount;
+					log.debug("+++Enter synchronize");
 					synchronized (fetchInfos) {
 						fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
 					}
@@ -700,6 +742,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					break;
 			}
 		}
+		log.debug("---Exit synchronize");
 	}
 
 	@Override
@@ -711,10 +754,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 				Object[] extracts = extractSymbolAndExpiration(p.getContractName());
 				String symbol = (String) extracts[0];
 				Expiration expiration = (Expiration) extracts[1];
+				log.debug("+++Enter synchronize");
 				synchronized (fetchInfos) {
 					log.info("On positions fixed margin");
 					fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
 				}
+				log.debug("---Exit synchronize");
 				sendStatusInfo(symbol, expiration);
 			});
 	}
@@ -729,10 +774,12 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 				int day = Integer.valueOf(cId.substring(6, 8));
 				LocalDate expiry = LocalDate.of(year, month, day);
 				Expiration expiration = determineExpiration(expiry);
+				log.debug("+++Enter synchronize");
 				synchronized (fetchInfos) {
 					log.info("On contracts fixed margin");
 					fetchInfos.addAll(EnumSet.of(FetchInfo.Contracts));
 				}
+				log.debug("---Exit synchronize");
 
 				sendStatusInfo(contracts.symbol.split("_")[0], expiration);
 			});
@@ -783,12 +830,14 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	}
 
 	private String trackWorkingOrder(Order order) {
+		log.debug("+++Enter synchronize");
+		String bmId = null;
 		synchronized (bmIdWorkingOrders) {
 			Object[] extracts = extractSymbolAndExpiration(order.contractName);
 			String alias = createAlias((String) extracts[0], (Expiration) extracts[1]);
 
 			boolean isBuy = LONG_ORDER_TYPES.contains(OkexOrderType.valueOf(order.type));
-			String bmId = String.valueOf(order.orderId);
+			bmId = String.valueOf(order.orderId);
 			long okexId = order.orderId;
 			double price = order.price;
 			int amount = (int) order.amount;
@@ -801,16 +850,19 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			okexBmIds.put(okexId, bmId);
 			bmOkexIds.put(bmId, okexId);
 			bmIdWorkingOrders.put(builder.getOrderId(), builder);
-			return bmId;
 		}
+		log.debug("---Exit synchronize");
+		return bmId;
 	}
 
 	private String trackWorkingOrder(OrderInfo order) {
+		log.debug("+++Enter synchronize");
+		String bmId = null;
 		synchronized (bmIdWorkingOrders) {
 			Object[] extracts = extractSymbolAndExpiration(order.contractName);
 			String alias = createAlias((String) extracts[0], (Expiration) extracts[1]);
 
-			String bmId = String.valueOf(order.orderId);
+			bmId = String.valueOf(order.orderId);
 			boolean isBuy = LONG_ORDER_TYPES.contains(OkexOrderType.valueOf(order.type));
 			long okexId = order.orderId;
 			double price = order.price;
@@ -824,9 +876,9 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			okexBmIds.put(okexId, bmId);
 			bmOkexIds.put(bmId, okexId);
 			bmIdWorkingOrders.put(builder.getOrderId(), builder);
-
-			return bmId;
 		}
+		log.debug("---Exit synchronize");
+		return bmId;
 	}
 
 	private OrderInfoBuilder createWorkingOrderInfoBuilder(String alias, String bmId, boolean isBuy, double price, int amount) {
