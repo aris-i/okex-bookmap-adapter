@@ -49,6 +49,7 @@ public class OkexFuturesRestClient extends AbstractRestClient {
 	}
 
 	public PlaceOrderResponse placeOrder(PlaceOrderRequest order) {
+		log.info("Place Order:  "+order);
 		Form form = new Form();
 
 		form.param("api_key", apiKey);
@@ -75,7 +76,7 @@ public class OkexFuturesRestClient extends AbstractRestClient {
 		form.param("api_key", apiKey);
 		form.param("symbol", positionRequest.getSymbol());
 		form.param("contract_type", positionRequest.getExpiration().name());
-//		form.param("type", String.valueOf(1));
+		form.param("type", String.valueOf(1));
 
 		SignForm signForm = new SignForm();
 		String sign = signForm.sign(form, secretKey);

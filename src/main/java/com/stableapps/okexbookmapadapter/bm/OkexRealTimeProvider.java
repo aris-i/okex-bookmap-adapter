@@ -58,13 +58,13 @@ public class OkexRealTimeProvider extends ExternalLiveBaseProvider {
 	private String apiKey;
 	private String secretKey;
 	public double priceGranularity = 0.5;
-	private int leverRate;
+	protected int leverRate;
 	protected final ExecutorService singleThreadExecutor;
 	protected final ScheduledExecutorService singleThreadScheduledExecutor;
 
 	public OkexRealTimeProvider() {
 		DOMConfigurator.configure(getClass().getResource("/log4j.xml"));
-		log.info( "Current Adapter Version:  0.2-4");
+		log.info( "Current Adapter Version:  0.2-6");
 		aliasInstruments = new HashMap<>();
 		singleThreadExecutor = Executors.newSingleThreadExecutor();
 		singleThreadScheduledExecutor = Executors.newSingleThreadScheduledExecutor();

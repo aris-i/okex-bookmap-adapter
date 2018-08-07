@@ -186,8 +186,8 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			bmId,
 			simpleParameters.isBuy,
 			orderType,
-			simpleParameters.clientId.equals(ONE_DIR_CLOSE_CLIENT_ID) ?
-				null : simpleParameters.clientId,
+			simpleParameters.clientId.equals(ONE_DIR_CLOSE_CLIENT_ID)
+			? null : simpleParameters.clientId,
 			simpleParameters.doNotIncrease);
 
 		log.info("Limit Price: " + simpleParameters.limitPrice);
@@ -305,22 +305,22 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					? OkexOrderType.OpenLongPosition
 					: OkexOrderType.OpenShortPosition;
 			case MKT:
-				if (clientId != null && clientId.equals(ONE_DIR_CLOSE_CLIENT_ID)){
-					return buy? 
-						OkexOrderType.CloseShortPosition: 
-						OkexOrderType.CloseLongPosition;
-				}else if (position > 0) {
-					return buy?
-						OkexOrderType.OpenLongPosition:
-						OkexOrderType.CloseLongPosition;
+				if (clientId != null && clientId.equals(ONE_DIR_CLOSE_CLIENT_ID)) {
+					return buy
+						? OkexOrderType.CloseShortPosition
+						: OkexOrderType.CloseLongPosition;
+				} else if (position > 0) {
+					return buy
+						? OkexOrderType.OpenLongPosition
+						: OkexOrderType.CloseLongPosition;
 				} else if (position < 0) {
-					return !buy?
-						OkexOrderType.OpenShortPosition:
-						OkexOrderType.CloseShortPosition;
+					return !buy
+						? OkexOrderType.OpenShortPosition
+						: OkexOrderType.CloseShortPosition;
 				} else {
-					return buy?
-						OkexOrderType.OpenLongPosition:
-						OkexOrderType.OpenShortPosition;
+					return buy
+						? OkexOrderType.OpenLongPosition
+						: OkexOrderType.OpenShortPosition;
 				}
 			default:
 				String message = "No supported order type: " + orderType;
@@ -506,12 +506,14 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 				log.debug("+++Enter synchronize");
 				synchronized (bmIdStopOrders) {
 					if (fetchOrdersInfo.isPresent()) {
-						fetchOrdersInfo.get().forEach(o -> {
-							Optional<String> bmId = Optional.ofNullable(okexBmIds.get(o.getOrderId()));
-							if (!bmId.isPresent()) {
-								trackWorkingOrder(o);
-							}
-						});
+						fetchOrdersInfo.get().stream()
+							.filter(o -> o.leverRate == leverRate)
+							.forEach(o -> {
+								Optional<String> bmId = Optional.ofNullable(okexBmIds.get(o.getOrderId()));
+								if (!bmId.isPresent()) {
+									trackWorkingOrder(o);
+								}
+							});
 					}
 
 					workingBuys
@@ -546,6 +548,7 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 						.build()
 				);
 
+				log.info("PositionRequestResponse: " + positionRequestResponse);
 				if (!positionRequestResponse.result) {
 					adminListeners
 						.forEach(
@@ -562,7 +565,10 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 					avePrice = 0;
 				} else {
 					//Okex always return only 1 holding
-					Position p = positionRequestResponse.getHolding().get(0);
+					Position p = positionRequestResponse.getHolding().stream()
+						.filter(pos -> pos.leverRate == leverRate)
+						.findFirst()
+						.get();
 					log.info("buyAmount: " + p.buyAmount);
 					log.info("sellAmount: " + p.sellAmount);
 					position = p.buyAmount - p.sellAmount;
