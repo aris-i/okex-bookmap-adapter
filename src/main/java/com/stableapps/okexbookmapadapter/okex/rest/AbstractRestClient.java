@@ -19,7 +19,8 @@ import org.glassfish.jersey.client.ClientProperties;
 public class AbstractRestClient implements AutoCloseable {
 
 	@Getter
-	private final WebTarget webTarget;
+//	private final WebTarget webTarget;
+	private WebTarget webTarget;
 	@Getter
 	private final Client client;
 	protected final String apiKey;
@@ -27,8 +28,8 @@ public class AbstractRestClient implements AutoCloseable {
 
 	public AbstractRestClient(String baseUrl, String apiKey, String secretKey) {
 		client = javax.ws.rs.client.ClientBuilder.newClient(new ClientConfig(JacksonJaxbJsonProvider.class));
-		client.property(ClientProperties.CONNECT_TIMEOUT, 1000);
-		client.property(ClientProperties.READ_TIMEOUT, 1000);
+		client.property(ClientProperties.CONNECT_TIMEOUT, 1000_000);
+		client.property(ClientProperties.READ_TIMEOUT, 1000_000);
 //		client.register(new LoggingFilter(log, true));
 		webTarget = client.target(baseUrl);
 		this.apiKey = apiKey;

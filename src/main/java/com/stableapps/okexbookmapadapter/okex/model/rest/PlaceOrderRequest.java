@@ -5,32 +5,38 @@
  */
 package com.stableapps.okexbookmapadapter.okex.model.rest;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.stableapps.okexbookmapadapter.okex.model.Expiration;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 /**
  *
  * @author aris
  */
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PlaceOrderRequest {
 
-	String symbol;
-	@JsonProperty("contract_type")
-	Expiration expiration;
-	double price;
-	int amount;
-	int type;
-	@JsonProperty("match_price")
-	int matchPrice;
-	@JsonProperty("lever_rate")
-	int leverRate;
+    @JsonProperty("client_oid")
+	String clientOrderId;
+    Object type;
+    
+//    @JsonIgnore
+    @JsonInclude(Include.NON_NULL)
+    @JsonProperty("size")
+    Double floatingPointSize;
+    
+    @JsonInclude(Include.NON_NULL)
+    @JsonProperty("order_id")
+    String orderId;
 
 }

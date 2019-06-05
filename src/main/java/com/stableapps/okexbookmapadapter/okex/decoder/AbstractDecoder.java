@@ -5,54 +5,49 @@
  */
 package com.stableapps.okexbookmapadapter.okex.decoder;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stableapps.okexbookmapadapter.okex.model.Expiration;
-import com.stableapps.okexbookmapadapter.okex.model.Interval;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.logging.Level;
+import java.nio.ByteBuffer;
 import java.util.regex.Pattern;
+
 import javax.websocket.DecodeException;
 import javax.websocket.Decoder;
 import javax.websocket.EndpointConfig;
-import lombok.extern.java.Log;
 
 /**
  *
  * @author aris
  * @param <T> T is the class to convert JSON response to.
  */
-@Log
-public abstract class AbstractDecoder<T> implements Decoder.Text<T> {
+import org.apache.commons.compress.compressors.deflate64.Deflate64CompressorInputStream;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public abstract class AbstractDecoder<T> implements Decoder.Binary<T> {
 
 	public static final Pattern INIT_RESPONSE_PATTERN = Pattern.compile("^.*\"result\"\\s*:\\s*true\\s*,\\s*\"channel\"\\s*:\\s*\"([^\"]+)\".*$");
 	public static final Pattern RESPONSE_PATTERN = Pattern.compile("^.*\"binary\"\\s*:\\s*\\d+\\s*,\"channel\"\\s*:\\s*\"(ok_sub_futureusd_[^\"]+)\".*$");
+	static String string = "";
 
-	private static String generateExpirationPattern() {
-		StringBuilder sb = new StringBuilder();
-		sb.append('(');
-		for (Expiration expiration : Expiration.values()) {
-			sb.append(expiration.name());
-			sb.append('|');
-		}
-		sb.deleteCharAt(sb.length() - 1);
-		sb.append(')');
-		return sb.toString();
-	}
-
-	private static String generateIntervalPattern() {
-		StringBuilder sb = new StringBuilder();
-		sb.append('(');
-		for (Interval interval : Interval.values()) {
-			sb.append(interval.toString());
-			sb.append('|');
-		}
-		sb.deleteCharAt(sb.length() - 1);
-		sb.append(')');
-		return sb.toString();
-	}
-
-	public static final String EXPIRATION_PATTERN = generateExpirationPattern();
-	public static final String INTERVAL_PATTERN = generateIntervalPattern();
+	private static String uncompress(ByteBuffer buff) {
+		byte[] bytes = buff.array();
+        try (final ByteArrayOutputStream out = new ByteArrayOutputStream();
+             final ByteArrayInputStream in = new ByteArrayInputStream(bytes);
+             final Deflate64CompressorInputStream zin = new Deflate64CompressorInputStream(in)) {
+            final byte[] buffer = new byte[1024];
+            int offset;
+            while (-1 != (offset = zin.read(buffer))) {
+                out.write(buffer, 0, offset);
+            }
+            
+            tempPrintOutputToLog(out.toString());
+            
+            return out.toString();
+        } catch (final IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
 	protected ObjectMapper objectMapper;
 	private final Class<T> msgClass;
@@ -62,6 +57,10 @@ public abstract class AbstractDecoder<T> implements Decoder.Text<T> {
 	}
 
 	@Override
+	public T decode(ByteBuffer buffer) throws DecodeException {
+		return decode(uncompress(buffer));
+	}
+	
 	public T decode(String arg0) throws DecodeException {
 //		System.out.println("\n\nResponse:\n"+arg0);
 		try {
@@ -70,12 +69,16 @@ public abstract class AbstractDecoder<T> implements Decoder.Text<T> {
 			}
 			return objectMapper.readValue(arg0, msgClass);
 		} catch (IOException ex) {
-			log.log(Level.SEVERE, "Could not decode JSON", ex);
+			ex.printStackTrace();
 			return null;
 		}
 	}
 
 	@Override
+	public boolean willDecode(ByteBuffer buffer) {
+		return willDecode(uncompress(buffer));
+	};
+	
 	public abstract boolean willDecode(String arg0);
 
 	@Override
@@ -87,4 +90,25 @@ public abstract class AbstractDecoder<T> implements Decoder.Text<T> {
 	public void destroy() {
 	}
 
+	private static void tempPrintOutputToLog(String output) {
+	    String newString = output.toString();
+//	    velox.api.layer1.common.Log.info(newString);
+        if (
+                !newString.equals(string)
+                &&
+//                (newString.contains("account")
+//                        || newString.contains("position"))
+                
+//        
+                newString.contains("depth")
+//                && newString.contains("partial")
+//                && !newString.contains("trade")
+//                && !newString.contains("order")
+//                && !newString.equals("pong")
+               
+                ) {
+            string = newString;
+//        velox.api.layer1.common.Log.info("UNIQUE " + count++ + " " + string);
+        }
+	}
 }

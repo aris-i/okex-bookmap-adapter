@@ -5,6 +5,7 @@
  */
 package com.stableapps.okexbookmapadapter.okex.model;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.Data;
 
 /**
@@ -12,9 +13,15 @@ import lombok.Data;
  * @author aris
  */
 @Data
+@JsonDeserialize(using = CustomLoginResponseDeserializer.class)
 public class LoginResponse extends Message {
 	int binary;
 	String channel;
 	LoginData data;
+	
+	String message;
+	int errorCode;
+	
+	
 	
 }

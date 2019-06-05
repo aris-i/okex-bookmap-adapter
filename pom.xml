@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.stableapps</groupId>
 	<artifactId>okex-bookmap-adapter</artifactId>
-	<version>0.2-beta</version>
+	<version>alpha-0.1.4.5</version>
 	<packaging>jar</packaging>
 	<build>
 		<plugins>
@@ -22,7 +22,6 @@
 						<configuration>
 							<artifactSet>
 								<excludes>
-									<exclude>*:log4j</exclude>
 									<exclude>*:commons-codec</exclude>
 									<exclude>*:gson</exclude>
 									<exclude>*:bm-l1api</exclude>
@@ -49,19 +48,19 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>log4j</groupId>
-			<artifactId>log4j</artifactId>
-			<version>1.2.17</version>
+			<groupId>com.fasterxml.jackson.jaxrs</groupId>
+			<artifactId>jackson-jaxrs-json-provider</artifactId>
+			<version>2.2.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.tyrus</groupId>
 			<artifactId>tyrus-client</artifactId>
-			<version>1.12</version>
+			<version>1.15</version>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.16.20</version>
+			<version>1.18.4</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -79,22 +78,22 @@
 		<dependency>
 			<groupId>org.glassfish.tyrus</groupId>
 			<artifactId>tyrus-container-grizzly-client</artifactId>
-			<version>1.13.1</version>
-		</dependency>
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-			<version>2.9.5</version>
-		</dependency>
-		<dependency>
-			<groupId>com.fasterxml.jackson.jaxrs</groupId>
-			<artifactId>jackson-jaxrs-json-provider</artifactId>
-			<version>2.9.5</version>
+			<version>1.15</version>
 		</dependency>
 		<dependency>
 			<groupId>javax.ws.rs</groupId>
 			<artifactId>javax.ws.rs-api</artifactId>
-			<version>2.1</version>
+			<version>2.1.1</version>
+		</dependency>
+		<dependency>
+    		<groupId>org.java-websocket</groupId>
+    		<artifactId>Java-WebSocket</artifactId>
+    		<version>1.3.9</version>
+		</dependency>
+		<dependency>
+    		<groupId>org.apache.commons</groupId>
+    		<artifactId>commons-lang3</artifactId>
+    		<version>3.8.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.glassfish.jersey.core</groupId>
@@ -104,12 +103,12 @@
 		<dependency>
 			<groupId>org.glassfish.jersey.inject</groupId>
 			<artifactId>jersey-hk2</artifactId>
-			<version>2.27</version>
+			<version>2.28</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-codec</groupId>
 			<artifactId>commons-codec</artifactId>
-			<version>1.11</version>
+			<version>1.12</version>
 		</dependency>
 		<dependency>
 			<groupId>com.google.code.gson</groupId>
@@ -121,10 +120,25 @@
 			<artifactId>bm-l1api</artifactId>
 			<version>7.0</version>
 		</dependency>
+		<dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.16</version>
+        </dependency>
+		
 	</dependencies>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.source>1.8</maven.compiler.source>
 		<maven.compiler.target>1.8</maven.compiler.target>
 	</properties>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>com.fasterxml.jackson.core</groupId>
+				<artifactId>jackson-core</artifactId>
+				<version>2.2.1</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 </project>

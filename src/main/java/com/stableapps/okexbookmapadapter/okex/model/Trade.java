@@ -5,6 +5,8 @@
  */
 package com.stableapps.okexbookmapadapter.okex.model;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,9 +22,21 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class Trade {
 
-	long tid;
+    String side;
+    String trade_id;
 	double price;
-	double amount;
-	String time;
-	String type;
+	public String instrument_id;
+	double qty;
+	String timestamp;
+	
+	@JsonSetter("qty")
+	public void setQtyFromQty (double qty){
+	    this.qty = qty;
+	}
+	
+	@JsonSetter("size")
+	public void setQtyFromSize (double size){
+	    this.qty = size;
+	}
+	
 }

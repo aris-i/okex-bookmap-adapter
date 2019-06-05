@@ -16,5 +16,6 @@ public class UnsubscribeResponse extends Message {
 
 	int binary;
 	String channel;
+	String event;
 	UnsubscribedData data;
 }

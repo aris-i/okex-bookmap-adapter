@@ -9,10 +9,15 @@ package com.stableapps.okexbookmapadapter.okex;
  *
  * @author aris
  */
-public abstract class AbstractClient implements OkexConnector.MarketPriceListener,
-		OkexConnector.CandlestickChartDataListener, OkexConnector.MarketDepthListener,
-		OkexConnector.TradeRecordListener, OkexConnector.IndexPriceListener,
-		OkexConnector.ForecastPriceListener, OkexConnector.OrderListener,
-		OkexConnector.PositionsFixedMarginListener, OkexConnector.ContractsFixedMarginListener,
+public abstract class AbstractClient implements	OkexConnector.MarketDepthListener,
+		OkexConnector.PositionListener,
+
+		OkexConnector.FuturesPositionListener,
+		
+		OkexConnector.FuturesAccountListener,
+		OkexConnector.SpotAccountListener,
+		OkexConnector.TradeRecordListener,
+		OkexConnector.OrderListener,
 		OkexConnector.ConnectionListener {
+
 }

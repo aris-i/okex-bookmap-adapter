@@ -19,7 +19,11 @@ public class LoginResponseDecoder extends AbstractDecoder<LoginResponse> {
 
 	@Override
 	public boolean willDecode(String arg0) {
-		return (arg0.contains("\"channel\":\"login\",\"data\":{\"result\":"));
+	    boolean isValid = arg0.contains("\"event\":\"login\",")
+	            || arg0.contains("\"errorCode\":30013")
+	            || arg0.contains("\"errorCode\":30027")
+	                    ; 
+		return isValid;
 	}
 
 }

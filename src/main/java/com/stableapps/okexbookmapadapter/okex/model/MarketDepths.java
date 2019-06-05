@@ -7,6 +7,9 @@ package com.stableapps.okexbookmapadapter.okex.model;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
 import lombok.Data;
 
 /**
@@ -14,11 +17,15 @@ import lombok.Data;
  * @author aris
  */
 @Data
+@JsonDeserialize(using = CustomMarketDepthsDeserializer.class)
 public class MarketDepths {
 
+    public String instrument_id;
+    public String timestamp;
+    public int checksum;
+    
 	public List<List<Double>> asks = null;
 	public List<List<Double>> bids = null;
-	public long timestamp;
 
 	List<MarketDepth> askDatas = new ArrayList<>();;
 	List<MarketDepth> bidDatas = new ArrayList<>();;

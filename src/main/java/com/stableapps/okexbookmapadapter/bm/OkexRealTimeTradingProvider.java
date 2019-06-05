@@ -5,180 +5,197 @@
  */
 package com.stableapps.okexbookmapadapter.bm;
 
-import com.stableapps.okexbookmapadapter.okex.model.CancelOrdersRequest;
-import com.stableapps.okexbookmapadapter.okex.model.CancelOrdersResponse;
-import com.stableapps.okexbookmapadapter.okex.model.Contracts;
-import com.stableapps.okexbookmapadapter.okex.model.Expiration;
-import com.stableapps.okexbookmapadapter.okex.model.MarketPrice;
-import com.stableapps.okexbookmapadapter.okex.model.MatchPrice;
-import com.stableapps.okexbookmapadapter.okex.model.OkexOrderStatus;
-import com.stableapps.okexbookmapadapter.okex.model.OkexOrderType;
-import com.stableapps.okexbookmapadapter.okex.model.Order;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequest;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderResponse;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PositionRequest;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PositionRequestResponse;
-import com.stableapps.okexbookmapadapter.okex.model.PositionsFixedMargin;
-import com.stableapps.okexbookmapadapter.okex.model.rest.Contract;
-import com.stableapps.okexbookmapadapter.okex.model.rest.OrderInfo;
-import com.stableapps.okexbookmapadapter.okex.model.rest.OrderInfoRequest;
-import com.stableapps.okexbookmapadapter.okex.model.rest.OrderInfoResponse;
-import com.stableapps.okexbookmapadapter.okex.model.rest.Position;
-import com.stableapps.okexbookmapadapter.okex.model.rest.UserInfoResponse;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
+import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import lombok.extern.log4j.Log4j;
-import velox.api.layer0.annotations.Layer0LiveModule;
+import java.util.stream.Collectors;
+
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.tuple.Pair;
+import org.java_websocket.util.Base64;
+
+import com.stableapps.okexbookmapadapter.okex.model.Expiration;
+import com.stableapps.okexbookmapadapter.okex.model.FutureAccountsContractFixedMargin;
+import com.stableapps.okexbookmapadapter.okex.model.FuturesAccount;
+import com.stableapps.okexbookmapadapter.okex.model.FuturesPosition;
+import com.stableapps.okexbookmapadapter.okex.model.FuturesPositionsOfCurrencyResponse;
+import com.stableapps.okexbookmapadapter.okex.model.OkexOrderTypeFuturesOrSwap;
+import com.stableapps.okexbookmapadapter.okex.model.OrderData;
+import com.stableapps.okexbookmapadapter.okex.model.OrderDataFutures;
+import com.stableapps.okexbookmapadapter.okex.model.OrderDataSpot;
+import com.stableapps.okexbookmapadapter.okex.model.OrdersFuturesList;
+import com.stableapps.okexbookmapadapter.okex.model.SpotAccount;
+import com.stableapps.okexbookmapadapter.okex.model.SubscribeFuturesAccountResponse;
+import com.stableapps.okexbookmapadapter.okex.model.SubscribeFuturesPositionResponse;
+import com.stableapps.okexbookmapadapter.okex.model.rest.AccountSpot;
+import com.stableapps.okexbookmapadapter.okex.model.rest.AccountsFuturesCrossMargin;
+import com.stableapps.okexbookmapadapter.okex.model.rest.AccountsFuturesFixedMarginResponse;
+import com.stableapps.okexbookmapadapter.okex.model.rest.InstrumentFutures;
+import com.stableapps.okexbookmapadapter.okex.model.rest.InstrumentGeneric;
+import com.stableapps.okexbookmapadapter.okex.model.rest.InstrumentSpot;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequest;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequestFuturesOrSwap;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequestTokenOrMargin;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderResponse;
+import com.stableapps.okexbookmapadapter.okex.rest.OkexFuturesRestClient;
+import com.stableapps.okexbookmapadapter.okex.utils.OkexUtils;
+
+import lombok.Data;
+import velox.api.layer1.Layer1ApiAdminListener;
+import velox.api.layer1.common.Log;
+import velox.api.layer1.data.BalanceInfo;
+import velox.api.layer1.data.BalanceInfo.BalanceInCurrency;
 import velox.api.layer1.data.ExecutionInfoBuilder;
 import velox.api.layer1.data.Layer1ApiProviderSupportedFeatures;
+import velox.api.layer1.data.LoginData;
+import velox.api.layer1.data.LoginFailedReason;
 import velox.api.layer1.data.OrderCancelParameters;
 import velox.api.layer1.data.OrderDuration;
 import velox.api.layer1.data.OrderInfoBuilder;
+import velox.api.layer1.data.OrderInfoUpdate;
 import velox.api.layer1.data.OrderSendParameters;
 import velox.api.layer1.data.OrderStatus;
 import velox.api.layer1.data.OrderType;
 import velox.api.layer1.data.OrderUpdateParameters;
 import velox.api.layer1.data.SimpleOrderSendParameters;
-import velox.api.layer1.data.SimpleOrderSendParametersBuilder;
-import velox.api.layer1.data.StatusInfo;
+import velox.api.layer1.data.SubscribeInfo;
 import velox.api.layer1.data.SystemTextMessageType;
 import velox.api.layer1.data.UserPasswordDemoLoginData;
 
 /**
  * @author aris
  */
-@Layer0LiveModule
-@Log4j
-public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
-	private enum FetchInfo {
-		Contracts, Positions, Orders;
-	}
+public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 
 	private static final String ONE_DIR_CLOSE_CLIENT_ID = "OneDirectionCloseClientID";
 	private static boolean RUN_MAIN = false;
-	private static final String DEFAULT_CURRENCY = "usd";
-	public static final EnumSet<OkexOrderType> LONG_ORDER_TYPES
-		= EnumSet.of(OkexOrderType.OpenLongPosition, OkexOrderType.CloseShortPosition);
-	public static final EnumSet<OkexOrderType> SHORT_ORDER_TYPES
-		= EnumSet.of(OkexOrderType.OpenShortPosition, OkexOrderType.CloseLongPosition);
+	public static final EnumSet<OkexOrderTypeFuturesOrSwap> LONG_ORDER_TYPES
+		= EnumSet.of(OkexOrderTypeFuturesOrSwap.OpenLongPosition, OkexOrderTypeFuturesOrSwap.CloseShortPosition);
+	public static final EnumSet<OkexOrderTypeFuturesOrSwap> SHORT_ORDER_TYPES
+		= EnumSet.of(OkexOrderTypeFuturesOrSwap.OpenShortPosition, OkexOrderTypeFuturesOrSwap.CloseLongPosition);
 
 	HashMap<Long, String> okexBmIds = new HashMap<>();
 	HashMap<String, Long> bmOkexIds = new HashMap<>();
 	private final HashMap<String, OrderInfoBuilder> bmIdWorkingOrders = new HashMap<>();
-	private final HashMap<String, OrderInfoBuilder> bmIdStopOrders = new HashMap<>();
-	private final EnumSet<FetchInfo> fetchInfos = EnumSet.allOf(FetchInfo.class);
-
-	private int volume = 0;
-	private final HashMap<String, ScheduledFuture<?>> aliasSendStatusInfoFutures = new HashMap<>();
-	private final HashMap<String, StatusInfo> aliasStatusInfos = new HashMap<>();
-
+	private final HashMap<String, OrderInfoBuilder> bmIdSentOrders = new HashMap<>();
+	private final HashMap<String, String> clientOidToOrderId= new HashMap<>();
+	private final HashMap<String, String> orderIdToClientOid = new HashMap<>();
+	private Map <String, Pair <Integer, Integer>> positionsMap = new HashMap<>();
+	private Map <String, Set<String>> currenciesForSpotBalance = new HashMap<>();
+	private Map <String, Set<String>> currenciesForSpotPosition = new HashMap<>();
+	private Map<String, UnrealizedPnlData> unrealizedPnlMap = new HashMap<>();
+	
+	
+	@Data
+	private static class UnrealizedPnlData{
+	    int qty;
+	    double avrCost;
+	    double lastBidTrade;
+	    double lastAskTrade;
+	}
+	
 	public OkexRealTimeTradingProvider() {
 		super();
 	}
-
+	
 	@Override
 	public Layer1ApiProviderSupportedFeatures getSupportedFeatures() {
 		// Expanding parent supported features, reporting basic trading support
 		return super.getSupportedFeatures()
 			.toBuilder()
+			.setExchangeUsedForSubscription(false)
+			.setBalanceSupported(true)
 			.setTrading(true)
-			.setSupportedOrderDurations(Arrays.asList(new OrderDuration[]{OrderDuration.GTC}))
-			.setSupportedStopOrders(Arrays.asList(new OrderType[]{OrderType.MKT}))
+			.setSupportedStopOrders(Arrays.asList(new OrderType[] {
+                    OrderType.MKT,
+                    OrderType.LMT
+            }))
+			.setSupportedOrderDurations(Arrays.asList(new OrderDuration[]{
+			        OrderDuration.GTC,
+			        OrderDuration.GTC_PO,
+			        OrderDuration.FOK,
+			        OrderDuration.IOC,
+			        }))
 			.build();
 	}
+	
+	   @Override
+	    public void login(LoginData loginData) {
+	        UserPasswordDemoLoginData userPasswordDemoLoginData = (UserPasswordDemoLoginData) loginData;
+	        
+	        if (userPasswordDemoLoginData.user.isEmpty() || userPasswordDemoLoginData.password.isEmpty()) {
+	            adminListeners.forEach(l -> l.onLoginFailed(
+	                    LoginFailedReason.WRONG_CREDENTIALS,
+	                    "Login or/and password field is empty")
+	                );
+	            return;
+	        }
+	        
+	        String[] splits = userPasswordDemoLoginData.user.split("::");
+	        try {
+	            assert splits.length == 2;
+	            apiKey = splits[0];
+	            passPhraze = splits[1];
+	            secretKey = userPasswordDemoLoginData.password;
+	        } catch (Exception e) {
+	            Log.info("Could not login.", e);
+	            adminListeners.forEach(l -> l.onLoginFailed(
+	                LoginFailedReason.WRONG_CREDENTIALS,
+	                INVALID_USERNAME_PASSWORD)
+	            );
+	            return;
+	        }
 
-	@Override
-	protected void onMarketPrice(String symbol, Expiration expiration, MarketPrice marketPrice) {
-		log.debug("+++Enter synchronize");
-		synchronized (bmIdStopOrders) {
-			ArrayList<String> forRemoval = new ArrayList<>();
-			String alias = createAlias(symbol, expiration);
-			bmIdStopOrders.entrySet()
-				.stream()
-				.filter(entry -> alias.equals(entry.getValue().getInstrumentAlias()))
-				.forEach(entry -> {
-					String bmId = entry.getKey();
-					OrderInfoBuilder stopOrder = entry.getValue();
-					if (stopOrder.isBuy()) {
-						if (stopOrder.getStopPrice() < Double.valueOf(marketPrice.getBuy())) {
-							//Convert this to market stopOrder and submit
-							log.debug("+++Enter synchronize");
-							log.info("Buy Stop Order Triggered");
-							StatusInfo statusInfo = getStatusInfo(alias);
-							forRemoval.add(bmId);
-							stopOrder.setType(OrderType.MKT);
-							OkexOrderType orderType
-								= statusInfo.position < 0
-									? OkexOrderType.CloseShortPosition
-									: OkexOrderType.OpenLongPosition;
-							sendOrder(symbol, expiration, orderType,
-								stopOrder.getUnfilled(), MatchPrice.Yes,
-								stopOrder.getStopPrice(), stopOrder);
-						}
-					} else {
-						if (stopOrder.getStopPrice() > Double.valueOf(marketPrice.getSell())) {
-							log.debug("+++Enter synchronize");
-							log.info("Sell Stop Order Triggered");
-							StatusInfo statusInfo = getStatusInfo(alias);
-							forRemoval.add(bmId);
-							stopOrder.setType(OrderType.MKT);
-							OkexOrderType orderType
-								= statusInfo.position > 0
-									? OkexOrderType.CloseLongPosition
-									: OkexOrderType.OpenShortPosition;
-							sendOrder(symbol, expiration, orderType,
-								stopOrder.getUnfilled(), MatchPrice.Yes,
-								stopOrder.getStopPrice(), stopOrder);
-						}
-					}
-				});
-			forRemoval.forEach(bmIdStopOrders::remove);
-		}
-		log.debug("---Exit synchronize");
-	}
+	        // If connection process takes a while then it's better to do it in
+	        // separate thread
+	        connectionThread = new Thread(() -> handleLogin());
+	        connectionThread.start();
+	    }
 
-	private StatusInfo getStatusInfo(String alias) {
-		synchronized (aliasStatusInfos) {
-			return aliasStatusInfos.get(alias);
-		}
-	}
+	    private void handleLogin() {
+	        Log.info("Logging in to OKEX");
+	        boolean isValid = getNewConnector().wslogin();
+
+	        if (isValid) {
+	            Log.info("Login to OKEX successful");
+	            adminListeners.forEach(Layer1ApiAdminListener::onLoginSuccessful);
+	        } else {
+	            Log.info("Login to OKEX failed");
+	            adminListeners.forEach(l -> l.onLoginFailed(
+	                LoginFailedReason.WRONG_CREDENTIALS,
+	                INVALID_USERNAME_PASSWORD)
+	            );
+	        }
+
+	    }
 
 	@Override
 	protected void onConnectionRestored() {
-		super.onConnectionRestored();
-		fetchInfos.clear();
-		fetchInfos.addAll(EnumSet.allOf(FetchInfo.class));
-		aliasInstruments.keySet().forEach(alias -> {
-			Object[] splitToSymbolAndExpiration = splitToSymbolAndExpiration(alias);
-			String symbol = (String) splitToSymbolAndExpiration[0];
-			Expiration expiration = (Expiration) splitToSymbolAndExpiration[1];
-			sendStatusInfo(symbol, expiration);
-		});
+        Log.info("\t\tOkexClient (TradingProvider)" + this.hashCode() +  ": onConnectionRestored()");
 	}
 
 	@Override
 	public void sendOrder(OrderSendParameters orderSendParameters) {
-		log.info("Send Order: " + orderSendParameters);
 		SimpleOrderSendParameters simpleParameters = (SimpleOrderSendParameters) orderSendParameters;
-		Object[] splits = splitToSymbolAndExpiration(simpleParameters.alias);
-		String symbol = (String) splits[0];
-		Expiration expiration = (Expiration) splits[1];
+		String symbol = simpleParameters.alias;
+		Expiration expiration = null;
 
 		OrderType orderType = OrderType.getTypeFromPrices(simpleParameters.stopPrice, simpleParameters.limitPrice);
 		if (RUN_MAIN) {
 			orderType = OrderType.LMT;
 		}
-		log.info("Order Type: " + orderType);
+		Log.info("Order Type: " + orderType);
 
 		String bmId = UUID.randomUUID().toString();
 		final OrderInfoBuilder orderInfo = new OrderInfoBuilder(
@@ -190,141 +207,205 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 			? null : simpleParameters.clientId,
 			simpleParameters.doNotIncrease);
 
-		log.info("Limit Price: " + simpleParameters.limitPrice);
-		log.info("Stop Price: " + simpleParameters.stopPrice);
+		Log.info("Limit Price: " + simpleParameters.limitPrice);
+		Log.info("Stop Price: " + simpleParameters.stopPrice);
 		orderInfo.setStopPrice(simpleParameters.stopPrice)
 			.setLimitPrice(simpleParameters.limitPrice)
 			.setUnfilled(simpleParameters.size)
-			.setDuration(OrderDuration.GTC)
+			.setDuration(simpleParameters.duration)
 			.setStatus(OrderStatus.PENDING_SUBMIT);
 		tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
 
 		orderInfo.markAllUnchanged();
-
-		if (orderType == OrderType.STP_LMT) {
+		
+		if (orderType == OrderType.STP 
+		        || orderType == OrderType.STP_LMT 
+		        || simpleParameters.stopLossOffset != 0
+		        || simpleParameters.takeProfitOffset != 0
+		        || simpleParameters.trailingStep > 0
+		        ) {
 			orderInfo.setStatus(OrderStatus.REJECTED);
 			tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
 			orderInfo.markAllUnchanged();
 
-			adminListeners
-				.forEach(
-					l -> l.onSystemTextMessage(
-						"We current don't support STP_LMT",
+			adminListeners.forEach(l -> l.onSystemTextMessage(
+						"StopLoss or TakeProfit orders are not supported at the moment",
 						SystemTextMessageType.ORDER_FAILURE
 					)
 				);
 			return;
 		}
 
-		if (orderType == OrderType.STP) {
-			trackStopOrder(orderInfo, symbol, expiration);
-			return;
-		}
-
-		MatchPrice matchPrice
-			= orderType == OrderType.LMT
-				? MatchPrice.No
-				: MatchPrice.Yes;
-		log.info("MatchPrice: " + matchPrice);
-
-		int amount = simpleParameters.size;
+		int size = simpleParameters.size;
 		double price = simpleParameters.limitPrice;
 		int position = 0;
-		StatusInfo statusInfo = getStatusInfo(simpleParameters.alias);
+		StatusInfoLocal statusInfo = aliasedStatusInfos.get(simpleParameters.alias);
 		if (statusInfo != null) {
 			position = statusInfo.position;
 		}
-		OkexOrderType okexOrderType = determineOkexOrderType(orderType,
+		OkexOrderTypeFuturesOrSwap okexOrderType = determineOkexOrderType(orderType,
 			simpleParameters.isBuy, position, simpleParameters.clientId);
-		log.info("OkexOrderType: " + okexOrderType);
-		sendOrder(symbol, expiration, okexOrderType, amount, matchPrice, price,
+		Log.info("OkexOrderType: " + okexOrderType);
+		sendOrder(symbol, expiration, okexOrderType, size, price,
 			orderInfo);
 	}
 
-	private void trackStopOrder(final OrderInfoBuilder orderInfo, String symbol, Expiration expiration) {
-		//Since OKEX does not support stop order.  We will have to manually track stop order.
-		log.debug("+++Enter synchronize");
-		synchronized (bmIdStopOrders) {
-			orderInfo.setStatus(OrderStatus.WORKING);
-			tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
-			bmIdStopOrders.put(orderInfo.getOrderId(), orderInfo);
-			log.info("Notify stop order working");
-			tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
-			orderInfo.markAllUnchanged();
-			sendStatusInfo(symbol, expiration);
-		}
-		log.debug("---Exit synchronize");
-	}
+    private void sendOrder(String alias, Expiration expiration, OkexOrderTypeFuturesOrSwap orderType, int size,
+            double price, final OrderInfoBuilder orderInfo) {
 
-	private void sendOrder(String symbol, Expiration expiration, OkexOrderType orderType, int amount,
-		MatchPrice matchPrice, double price, final OrderInfoBuilder orderInfo) {
+        PlaceOrderRequest orderRequest = new PlaceOrderRequest();
+        String instrumentType = alias.substring(0, alias.indexOf('@'));
+        String symbol = alias.substring(alias.indexOf('@') + 1);
 
-		singleThreadExecutor.submit(() -> {
-			log.debug("+++Enter synchronize");
-			synchronized (bmIdWorkingOrders) {
-				PlaceOrderResponse orderResponse = getConnector().placeOrder(PlaceOrderRequest
-					.builder()
-					.amount(amount)
-					.expiration(expiration)
-					.matchPrice(matchPrice.getValue())
-					.price(price)
-					.symbol(symbol.toLowerCase())
-					.type(orderType.getValue())
-					.build()
-				);
+        switch (instrumentType) {
+        case "spot":
+            PlaceOrderRequestTokenOrMargin spotRequest = new PlaceOrderRequestTokenOrMargin();
+            spotRequest.setType("limit");
+            spotRequest.setSide(orderInfo.isBuy() ? "buy" : "sell");
+            spotRequest.setInstrumentId(symbol);
+            spotRequest.setMarginTrading(1);//
+            spotRequest.setDuration(OkexUtils.getDurationType(orderInfo.getDuration()));
 
-				if (!orderResponse.isResult()) {
-					log.info("Order Rejected: " + orderResponse.getErrorCode());
-					orderInfo.setStatus(OrderStatus.REJECTED);
-					tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
-					orderInfo.markAllUnchanged();
+            if (orderInfo.getType() == OrderType.LMT) {
+                spotRequest.setPrice(price);
+                spotRequest.setFloatingPointSize(size * getMinSize(alias));
+            } else if (orderInfo.getType() == OrderType.MKT) {
+                spotRequest.setFloatingPointSize(size * getMinSize(alias));
+                int bestPrice = ((OkexClient) connector.client).getBestPrice(orderInfo.isBuy(), alias);
+                spotRequest.setPrice(bestPrice);
+            }
 
-					adminListeners.forEach(l -> l.onSystemTextMessage("Failed to place order with error code: "
-						+ orderResponse.getErrorCode(), SystemTextMessageType.ORDER_FAILURE));
-					return;
-				}
+            orderRequest = spotRequest;
+            break;
+        case "margin":
+            PlaceOrderRequestTokenOrMargin marginRequest = new PlaceOrderRequestTokenOrMargin();
+            marginRequest.setType(orderInfo.getType().equals(OrderType.MKT) ? "market" : "limit");
+            marginRequest.setMarginTrading(2);
+            orderRequest = marginRequest;
+            break;
+        case "futures":
+            PlaceOrderRequestFuturesOrSwap futures = new PlaceOrderRequestFuturesOrSwap();
+            futures.setType(orderInfo.isBuy() ? "1" : "2");
+            futures.setInstrumentId(symbol);
+            futures.setOrderType(OkexUtils.getDurationType(orderInfo.getDuration()));
 
-				log.debug("Order Id: " + orderResponse.getOrderId());
-				orderInfo.setStatus(OrderStatus.WORKING);
-				tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
-				orderInfo.markAllUnchanged();
+            if (orderInfo.getType().equals(OrderType.MKT)) {
+                futures.setMatchPrice("1");
+            } else {
+                futures.setPrice(orderInfo.getLimitPrice());
+            }
+            futures.setLeverage(String.valueOf(leverRate));
+            futures.setFloatingPointSize(null);
+            futures.setSize(size);//
+            orderRequest = futures;
+            break;
 
-				okexBmIds.put(orderResponse.getOrderId(), orderInfo.getOrderId());
-				bmOkexIds.put(orderInfo.getOrderId(), orderResponse.getOrderId());
-				bmIdWorkingOrders.put(orderInfo.getOrderId(), orderInfo);
-			}
-			log.debug("---Exit synchronize");
-		});
-	}
+        }
 
-	private OkexOrderType determineOkexOrderType(OrderType orderType, boolean buy,
+        String clientOid = orderInfo.getClientId();
+        byte[] bytes = clientOid.getBytes();
+        byte[] decBytes;
+        String convertedId = "";
+        try {
+            decBytes = Base64.decode(bytes);
+            convertedId = Hex.encodeHexString(decBytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        orderRequest.setClientOrderId(convertedId);
+        final String workaroundId = convertedId;
+        PlaceOrderRequest workaroundRequest = orderRequest;
+        
+        int positionLong = 0;
+        int positionShort = 0;
+        boolean isCodirectionalWithPosition = true;
+
+        if (instrumentType.equals("futures")) {
+            positionLong = positionsMap.get(alias).getRight();
+            positionShort = positionsMap.get(alias).getLeft();
+            isCodirectionalWithPosition = positionsMap.get(alias) == null || positionShort == positionLong
+                    || !orderInfo.isBuy() && positionShort > positionLong
+                    || orderInfo.isBuy() && positionLong > positionShort;
+        }
+
+        if (instrumentType.equals("futures") && orderInfo.getType() == OrderType.MKT && !isCodirectionalWithPosition) {
+
+            if (size == Math.abs(positionLong - positionShort)) {
+
+                if (positionLong != 0) {
+                    closeFuturesPosition(workaroundRequest, workaroundId, orderInfo, "3", positionLong);
+                }
+                if (positionShort != 0) {
+                    closeFuturesPosition(workaroundRequest, workaroundId, orderInfo, "4", positionShort);
+                }
+            } else {
+                if (orderInfo.isBuy()) {
+                    closeFuturesPosition(workaroundRequest, workaroundId, orderInfo, "4", size);
+                } else {
+                    closeFuturesPosition(workaroundRequest, workaroundId, orderInfo, "3", size);
+                }
+            }
+        } else {
+
+            singleThreadExecutor.submit(() -> {
+                Log.debug("+++Enter synchronize");
+                synchronized (bmIdSentOrders) {
+                    bmIdSentOrders.put(workaroundId, orderInfo);
+
+                    PlaceOrderResponse orderResponse = getConnector().placeOrder(workaroundRequest);
+                    
+                    orderInfo.setStatus(OrderStatus.PENDING_SUBMIT);
+                    tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
+                    orderInfo.markAllUnchanged();
+
+                    if (!orderResponse.isResult()) {
+                        Log.info("REST Order Rejected: " + orderResponse.getErrorCode() + " "
+                                + orderResponse.getErrorMessage());
+                        orderInfo.setStatus(OrderStatus.REJECTED);
+                        tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
+                        orderInfo.markAllUnchanged();
+
+                        adminListeners
+                                .forEach(l -> l.onSystemTextMessage(
+                                        "Failed to place order with error code: " + orderResponse.getErrorCode() + "\n"
+                                                + orderResponse.getErrorMessage(),
+                                        SystemTextMessageType.ORDER_FAILURE));
+                        return;
+                    }
+                }
+            });
+        }
+    }
+
+	private OkexOrderTypeFuturesOrSwap determineOkexOrderType(OrderType orderType, boolean buy,
 		int position, String clientId) {
 		switch (orderType) {
 			case LMT:
 				return buy
-					? OkexOrderType.OpenLongPosition
-					: OkexOrderType.OpenShortPosition;
+					? OkexOrderTypeFuturesOrSwap.OpenLongPosition
+					: OkexOrderTypeFuturesOrSwap.OpenShortPosition;
 			case MKT:
 				if (clientId != null && clientId.equals(ONE_DIR_CLOSE_CLIENT_ID)) {
 					return buy
-						? OkexOrderType.CloseShortPosition
-						: OkexOrderType.CloseLongPosition;
+						? OkexOrderTypeFuturesOrSwap.CloseShortPosition
+						: OkexOrderTypeFuturesOrSwap.CloseLongPosition;
 				} else if (position > 0) {
 					return buy
-						? OkexOrderType.OpenLongPosition
-						: OkexOrderType.CloseLongPosition;
+						? OkexOrderTypeFuturesOrSwap.OpenLongPosition
+						: OkexOrderTypeFuturesOrSwap.CloseLongPosition;
 				} else if (position < 0) {
 					return !buy
-						? OkexOrderType.OpenShortPosition
-						: OkexOrderType.CloseShortPosition;
+						? OkexOrderTypeFuturesOrSwap.OpenShortPosition
+						: OkexOrderTypeFuturesOrSwap.CloseShortPosition;
 				} else {
 					return buy
-						? OkexOrderType.OpenLongPosition
-						: OkexOrderType.OpenShortPosition;
+						? OkexOrderTypeFuturesOrSwap.OpenLongPosition
+						: OkexOrderTypeFuturesOrSwap.OpenShortPosition;
 				}
 			default:
 				String message = "No supported order type: " + orderType;
-				log.warn(message);
+				Log.info(message);
 				throw new IllegalArgumentException(message);
 		}
 	}
@@ -332,584 +413,710 @@ public class OkexRealTimeTradingProvider extends OkexRealTimeProvider {
 	@Override
 	public void updateOrder(OrderUpdateParameters orderUpdateParameters) {
 		if (orderUpdateParameters.getClass() == OrderCancelParameters.class) {
-			log.debug("+++Enter synchronize");
+			Log.debug("+++Enter synchronize");
 			synchronized (bmIdWorkingOrders) {
-				log.info("Cancel order with provided ID: " + orderUpdateParameters.orderId);
+				Log.info("Cancel order with provided ID: " + orderUpdateParameters.orderId);
 				OrderCancelParameters orderCancelParameters = (OrderCancelParameters) orderUpdateParameters;
-				Optional<OrderInfoBuilder> wOrder = Optional.ofNullable(bmIdWorkingOrders.get(orderCancelParameters.orderId));
-
-				if (!wOrder.isPresent()) {
-					log.info("Order is not from active orders, try stop orders");
-					cancelStopOrder(orderUpdateParameters.orderId);
-					return;
-				}
-
-				Object[] splits = splitToSymbolAndExpiration(wOrder.get().getInstrumentAlias());
-				String symbol = (String) splits[0];
-				Expiration expiration = (Expiration) splits[1];
-
-				Long okexId = bmOkexIds.get(orderCancelParameters.orderId);
-				sendCancelOrder(okexId, symbol, expiration);
+				
+				String id = orderIdToClientOid.get(orderCancelParameters.orderId);
+				
+				String alias = bmIdWorkingOrders.get(id).getInstrumentAlias();
+	            int at = alias.indexOf('@');
+	            String symbol = alias.substring(at + 1);
+	            String type = alias.substring(0, at);
+		        String body = "{\"client_oid\":\"" + id + "\", \"instrument_id\":\"" + symbol + "\"}";
+				String path = "";
+				
+				if (type.equals("spot")) {
+				    path = "/api/spot/v3/cancel_orders/";
+				} else if (type.equals("futures")) {
+                    path = "/api/futures/v3/cancel_order/" + symbol + "/";
+                }
+				connector.okexRestClient.call(path + id, body, String.class, apiKey, secretKey, connector.passPhraze);
 			}
-			log.debug("---Exit synchronize");
 		} else {
-			log.error("Unsupported order update parameter: " + orderUpdateParameters.getClass().getSimpleName());
-			adminListeners
-				.forEach(
-					l -> l.onSystemTextMessage(
-						"Unsupported order update action",
-						SystemTextMessageType.ORDER_FAILURE
-					)
-				);
-		}
-	}
+            Log.error("Unsupported order update parameter: " + orderUpdateParameters.getClass().getSimpleName());
+            adminListeners.forEach(
+                    l -> l.onSystemTextMessage("Unsupported order update action", SystemTextMessageType.ORDER_FAILURE));
+        }
+    }
 
-	private void cancelStopOrder(String orderId) {
-		log.debug("+++Enter synchronize");
-		synchronized (bmIdStopOrders) {
-			Optional<OrderInfoBuilder> wOrder = bmIdStopOrders
-				.values()
-				.stream()
-				.filter(o -> o.getOrderId().equals(orderId))
-				.findFirst();
+    @SuppressWarnings("unlikely-arg-type")
+    protected void onOrder(OrderData order) {
 
-			if (!wOrder.isPresent()) {
-				log.warn("No stop Order match: " + orderId);
-				return;
-			}
+        synchronized (bmIdWorkingOrders) {
+            Optional<String> bmId = Optional.ofNullable(okexBmIds.get(order.getOrderId()));
+            Log.info("Order Received: " + order.getOrderId());
+            Log.info("Order: " + order);
+            Log.info("BM ID isPresent: " + bmId.isPresent());
+            String alias = order.getInstrumentType() + "@" + order.getInstrumentId();
 
-			OrderInfoBuilder orderInfo = bmIdStopOrders.remove(orderId);
-			orderInfo.setStatus(OrderStatus.CANCELLED);
-			log.info("Sending Stop Order Cancelled notification");
-			tradingListeners.forEach(l -> l.onOrderUpdated((orderInfo.build())));
-			orderInfo.markAllUnchanged();
+            boolean isBuy = false;
+            if (order instanceof OrderDataSpot) {
+                isBuy = ((OrderDataSpot) order).getSide().equals("buy");
+                order.setInstrumentType("spot");
+            } else if (order instanceof OrderDataFutures) {
+                order.setInstrumentType("futures");
+                OrderDataFutures futures = (OrderDataFutures) order;
 
-			Object[] splits = splitToSymbolAndExpiration(orderInfo.getInstrumentAlias());
-			String symbol = (String) splits[0];
-			Expiration expiration = (Expiration) splits[1];
-			sendStatusInfo(symbol, expiration);
-		}
-		log.debug("---Exit synchronize");
-	}
+                if (futures.getType().equals("1") || futures.getType().equals("4")) {
+                    isBuy = true;
+                } else if (futures.getType().equals("2") || futures.getType().equals("3")) {
+                    isBuy = false;
+                } else {
+                    throw new RuntimeException("futures order type = " + futures.getType());
+                }
+            } else {
+                throw new RuntimeException("unknown order type");
+            }
 
-	private void sendCancelOrder(Long okexId, String symbol, Expiration expiration) {
-		singleThreadExecutor.submit(() -> {
-			CancelOrdersResponse response = getConnector().cancelOrders(
-				CancelOrdersRequest.builder()
-					.orderIds(String.valueOf(okexId))
-					.expiration(expiration)
-					.symbol(symbol.toLowerCase())
-					.build()
-			);
+            if (order.getClientOid().equals("") || !bmIdSentOrders.containsKey(order.getClientOid())) {
+                
 
-			if (!response.isResult()) {
-				adminListeners
-					.forEach(
-						l -> l.onSystemTextMessage(
-							"Could not cancel orders",
-							SystemTextMessageType.ORDER_FAILURE
-						)
-					);
-			}
-		});
-	}
+                OrderInfoBuilder newBuilder = new OrderInfoBuilder(alias, order.getOrderId(), isBuy,
+                        order.getType().equals("limit") ? OrderType.LMT : OrderType.MKT, "", false);
+                if (order instanceof OrderDataSpot && order.getType().equals("limit")
+                        || order instanceof OrderDataFutures
+                                && ((order.getType().equals("1") || order.getType().equals("4"))
+                                        || (order.getType().equals("2") || order.getType().equals("3")))) {
+                    newBuilder.setLimitPrice(order.getPrice());
+                    newBuilder.setType(OrderType.LMT);
+                }
 
-	@Override
-	public void subscribe(String symbol, String exchange, String type) {
-		super.subscribe(symbol, exchange, type);
-		Expiration expiration = Expiration.valueOf(type.toLowerCase());
-		sendStatusInfo(symbol, expiration);
-	}
+                order.setClientOid(order.getOrderId());
 
-	private void sendStatusInfo(String symbol, Expiration expiration) {
-		/*
-		We need to fetch info via REST since OKEX socket API does not provide all the info that we
-		need.  Anyway this does not happen often.
-		 */
-		String alias = createAlias(symbol, expiration);
-		final int _volume = volume;
-		ScheduledFuture<?> sendStatusInfoFuture = aliasSendStatusInfoFutures.get(alias);
-		if (sendStatusInfoFuture != null && !sendStatusInfoFuture.isDone()) {
-			sendStatusInfoFuture.cancel(true);
-		}
+                if (order instanceof OrderDataSpot) {
+                    newBuilder.setUnfilled((int) Math.round(order.getSize() / OkexRealTimeProvider.getMinSize(alias)));
+                }
+                if (order instanceof OrderDataFutures) {
+                    newBuilder
+                            .setUnfilled((int) Math.round(order.getSize() - ((OrderDataFutures) order).getFilledQty()));
+                }
 
-		sendStatusInfoFuture = singleThreadScheduledExecutor.schedule(() -> {
-			log.debug("+++Enter synchronize");
-			synchronized (aliasInstruments) {
-				if (!aliasInstruments.containsKey(alias)) {
-					log.info("We are not subscribed to this: " + alias + " No need to send status update");
-					return;
-				}
-			}
-			log.debug("---Exit synchronize");
+                newBuilder.setDuration(OrderDuration.GTC);
 
-			EnumSet<FetchInfo> currFetchInfos = getCurrFetchInfos();
-			log.info("Sending Status Info");
-			log.info("CurrFetchInfos: " + currFetchInfos);
-			log.info("symbol: " + symbol + ", expiration: " + expiration);
-			StatusInfo statusInfo = getStatusInfo(alias);
-			String instrPair = symbol.toLowerCase() + "_" + DEFAULT_CURRENCY;
+                OrderStatus status;
+                if (order.getState().equals(0)) {
+                    status = OrderStatus.PENDING_SUBMIT;
+                    bmIdSentOrders.put(order.getOrderId(), newBuilder);
+                } else {
+                    status = OrderStatus.WORKING;
+                    bmIdWorkingOrders.put(order.getOrderId(), newBuilder);
+                }
 
-			//Contracts ##################################################
-			double realizedPnl = 0.0;
-			double unrealizedPnl = 0.0;
+                newBuilder.setStatus(status);
+                tradingListeners.forEach(l -> l.onOrderUpdated(newBuilder.build()));
+            }
 
-			if (statusInfo != null) {
-				realizedPnl = statusInfo.realizedPnl;
-				unrealizedPnl = statusInfo.unrealizedPnl;
-			}
+            OrderInfoBuilder orderInfo;
+            OrderInfoUpdate update;
 
-			if (currFetchInfos.contains(FetchInfo.Contracts)) {
-				Optional<Contract> contract = fetchContractInfo(symbol, expiration);
-				if (!contract.isPresent()) {
-					log.warn("Could not get latest status info from OKEX");
-					adminListeners
-						.forEach(
-							l -> l.onSystemTextMessage(
-								"Could not get latest status info from OKEX",
-								SystemTextMessageType.UNCLASSIFIED
-							)
-						);
-					return;
-				}
-				MarketPrice marketPrice = fetchLatestMarketPrice(symbol, expiration);
-				log.info("Market Price: " + marketPrice);
+            StatusInfoLocal info = aliasedStatusInfos.computeIfAbsent(alias, v -> {
+                StatusInfoLocal infoLocal =  new StatusInfoLocal();
+                infoLocal.setInstrumentAlias(alias);
+                return infoLocal;
+                });
+            int buyOpenOrders = info.getWorkingBuys();
+            int sellOpenOrders = info.getWorkingSells();
+            
+            switch (order.getState()) {
+            case -2:// previous API "rejected" current API "failed"
+                orderInfo = bmIdSentOrders.get(order.getClientOid());
+                bmIdSentOrders.remove(orderInfo.getClientId());
 
-				realizedPnl = contract.get().profit * Double.valueOf(marketPrice.getSell());
-				unrealizedPnl = contract.get().unprofit * Double.valueOf(marketPrice.getSell());
-			}
+                orderInfo.setStatus(OrderStatus.REJECTED);
+                update = orderInfo.build();
+                tradingListeners.forEach(l -> l.onOrderUpdated(update));
+                orderInfo.markAllUnchanged();
+                break;
+            case 0: // "open"
+                orderInfo = bmIdSentOrders.get(order.getClientOid());
+                bmIdSentOrders.remove(orderInfo.getClientId());
 
-			//Orders ##################################################
-			Optional<List<OrderInfo>> fetchOrdersInfo = Optional.empty();
-			if (currFetchInfos.contains(FetchInfo.Orders)) {
-				fetchOrdersInfo = fetchOrdersInfo(instrPair, expiration);
+                Log.info("ORDER OPEN clOid" + order.getClientOid() + " clId " + orderInfo.getClientId());
+                orderInfo.setStatus(OrderStatus.WORKING);
+                update = orderInfo.build();
+                tradingListeners.forEach(l -> l.onOrderUpdated(update));
+                orderInfo.markAllUnchanged();
 
-				if (!fetchOrdersInfo.isPresent()) {
-					log.warn("Could not get latest status info from OKEX");
-					adminListeners
-						.forEach(
-							l -> l.onSystemTextMessage(
-								"Could not get latest status info from OKEX",
-								SystemTextMessageType.UNCLASSIFIED
-							)
-						);
-					return;
-				}
+                clientOidToOrderId.put(order.getClientOid(), orderInfo.getOrderId());
+                orderIdToClientOid.put(orderInfo.getOrderId(), order.getClientOid());
+                bmIdWorkingOrders.put(order.getClientOid(), orderInfo);
+                
+                if (isBuy) {
+                    info.setWorkingBuys(++buyOpenOrders);
+                } else {
+                    info.setWorkingSells(++sellOpenOrders);
+                }
+                break;
+            case -1:// "cancelled"
+                orderInfo = bmIdWorkingOrders.get(order.getClientOid());
+                Log.info("Order Cancelled");
+                orderInfo.setStatus(OrderStatus.CANCELLED);
+                bmOkexIds.remove(orderInfo.getOrderId());
+                okexBmIds.remove(order.getOrderId());
+                bmIdWorkingOrders.remove(orderInfo.getOrderId());
+                update = orderInfo.build();
+                tradingListeners.forEach(l -> l.onOrderUpdated(update));
+                orderInfo.markAllUnchanged();
+                
+                if (isBuy) {
+                    info.setWorkingBuys(--buyOpenOrders);
+                } else {
+                    info.setWorkingSells(--sellOpenOrders);
+                }
+                break;
+            case 2:// "fully filled"
+                orderInfo = bmIdWorkingOrders.get(order.getClientOid());
+                Log.info("Order filled");
+                orderInfo.setUnfilled(0);
+                if (order.getInstrumentType().equals("spot")) {
+                    orderInfo.setFilled((int) Math.round(order.getSize()/getMinSize(alias)));
+                } else {
+                    orderInfo.setFilled((int) order.getSize());// !!!!!!!!!!! size is fp, turn to integer
+                }
+                
+                orderInfo.setStatus(OrderStatus.FILLED);
+                orderInfo.setAverageFillPrice(order.getLastFillPx());
+                update = orderInfo.build();
+                tradingListeners.forEach(l -> l.onOrderUpdated(update));
+                orderInfo.markAllUnchanged();
+                bmOkexIds.remove(orderInfo.getOrderId());
+                okexBmIds.remove(order.getOrderId());
+                bmIdWorkingOrders.remove(orderInfo.getOrderId());
+                String execId = UUID.randomUUID().toString();
+                ExecutionInfoBuilder executionInfoBuilder = new ExecutionInfoBuilder(orderInfo.getOrderId(),
+                        orderInfo.getFilled(), orderInfo.getAverageFillPrice(), execId, System.currentTimeMillis(),
+                        false);
+                tradingListeners.forEach(l -> l.onOrderExecuted(executionInfoBuilder.build()));
 
-			}
+                if (isBuy) {
+                    info.setWorkingBuys(--buyOpenOrders);
+                } else {
+                    info.setWorkingSells(--sellOpenOrders);
+                }
+                break;
+            case 4:// cancel in process
+                Log.info("Order Cancel In Process");
+                orderInfo = bmIdWorkingOrders.get(order.getClientOid());
+                orderInfo.setStatus(OrderStatus.PENDING_CANCEL);
+                tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
+                orderInfo.markAllUnchanged();
+                break;
+//				case PartiallyFilled: not implemented
+//				case Unfilled: not implemented
+            }
+            updateStatus(info);
+        }
+    }
+   
+    protected void onFuturesAccount(SubscribeFuturesAccountResponse response) {
+	    
+        Map<String, FuturesAccount> map = response.data.get(0);
 
-			int workingBuys = 0;
-			int workingSells = 0;
+        for (String token : map.keySet()) {
+            FuturesAccount account = map.get(token);
 
-			log.debug("+++Enter synchronize");
-			synchronized (bmIdWorkingOrders) {
-				log.debug("+++Enter synchronize");
-				synchronized (bmIdStopOrders) {
-					if (fetchOrdersInfo.isPresent()) {
-						fetchOrdersInfo.get().stream()
-							.filter(o -> o.leverRate == leverRate)
-							.forEach(o -> {
-								Optional<String> bmId = Optional.ofNullable(okexBmIds.get(o.getOrderId()));
-								if (!bmId.isPresent()) {
-									trackWorkingOrder(o);
-								}
-							});
-					}
+            if (account.getContracts() != null) {
+                List<FutureAccountsContractFixedMargin> contracts = account.getContracts();
 
-					workingBuys
-						= bmIdWorkingOrders.values()
-							.stream()
-							.mapToInt(o -> o.isBuy() ? 1 : 0)
-							.sum()
-						+ bmIdStopOrders.values()
-							.stream()
-							.mapToInt(o -> o.isBuy() ? 1 : 0)
-							.sum();
-					workingSells = bmIdWorkingOrders.size() + bmIdStopOrders.size() - workingBuys;
-					log.info("Working Buys: " + workingBuys);
-					log.info("Working Sells: " + workingSells);
-				}
-			}
+                for (FutureAccountsContractFixedMargin contract : contracts) {
+                    account.setRealizedPnl(account.getRealizedPnl() + contract.getRealizedPnl());
+                    account.setUnrealizedPnl(account.getUnrealizedPnl() + contract.getUnrealizedPnl());
+                }
+            }
 
-			//Positions ##################################################
-			int position = 0;
-			double avePrice = 0;
+            BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(account.getEquity(), // balance
+                    account.getRealizedPnl(), // realized PnL,
+                    account.getUnrealizedPnl(), // unrealized PnL,
+                    Double.NaN, // previousDayBalance,
+                    Double.NaN, // netLiquidityValue
+                    token, null);// rateToBase)
+            tradingListeners.forEach(l -> l.onBalance(new BalanceInfo(Collections.singletonList(balance))));
+        }
+    }
+	
+	private void onFuturesAccountRestResponse(FuturesAccount account) {
+        if (account.getContracts() != null) {
+            List<FutureAccountsContractFixedMargin> contracts = account.getContracts();
 
-			if (statusInfo != null) {
-				position = statusInfo.position;
-				avePrice = statusInfo.averagePrice;
-			}
+            for (FutureAccountsContractFixedMargin contract : contracts) {
+                account.setRealizedPnl(account.getRealizedPnl() + contract.getRealizedPnl());
+                account.setUnrealizedPnl(account.getUnrealizedPnl() + contract.getUnrealizedPnl());
+            }
+        }
 
-			if (currFetchInfos.contains(FetchInfo.Positions)) {
-				PositionRequestResponse positionRequestResponse = getConnector().fetchPosition(
-					PositionRequest.builder()
-						.symbol(instrPair)
-						.expiration(expiration)
-						.build()
-				);
+        BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(account.getEquity(), // balance
+                account.getRealizedPnl(), // realized PnL,
+                account.getUnrealizedPnl(), // unrealized PnL,
+                Double.NaN, // previousDayBalance,
+                Double.NaN, // netLiquidityValue
+                account.getCurrency(), null);// rateToBase)
+        tradingListeners.forEach(l -> l.onBalance(new BalanceInfo(Collections.singletonList(balance))));
+    }
+	
+    protected void onSpotAccount(List<SpotAccount> accounts) {
+        for (SpotAccount account : accounts) {
+            String currency = account.getCurrency();
 
-				log.info("PositionRequestResponse: " + positionRequestResponse);
-				if (!positionRequestResponse.result) {
-					adminListeners
-						.forEach(
-							l -> l.onSystemTextMessage(
-								"Could not get latest status info from OKEX",
-								SystemTextMessageType.UNCLASSIFIED
-							)
-						);
-					return;
-				}
+            if (currenciesForSpotBalance.containsKey(currency)) {
+                BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(account.getAvailable(), // balance
+                        Double.NaN, // realized PnL,
+                        Double.NaN, // unrealized PnL,
+                        Double.NaN, // previousDayBalance,
+                        Double.NaN, // netLiquidityValue
+                        currency, null);// rateToBase)
 
-				if (positionRequestResponse.getHolding().isEmpty()) {
-					position = 0;
-					avePrice = 0;
-				} else {
-					//Okex always return only 1 holding
-					Position p = positionRequestResponse.getHolding().stream()
-						.filter(pos -> pos.leverRate == leverRate)
-						.findFirst()
-						.get();
-					log.info("buyAmount: " + p.buyAmount);
-					log.info("sellAmount: " + p.sellAmount);
-					position = p.buyAmount - p.sellAmount;
-					avePrice
-						= (p.buyAmount * p.buyPriceAvg + p.sellAmount * p.sellPriceAvg)
-						/ (p.buyAmount + p.sellAmount);
+                tradingListeners.forEach(l -> l.onBalance(new BalanceInfo(Collections.singletonList(balance))));
+            }
 
-					if (p.buyAmount != 0 && p.sellAmount != 0) {
-						log.info("We have both long and short position.  We will close"
-							+ " positions until we have only one direction");
-						//We need to maintain only one direction according to Paul of Bookmap
-						//This will result to orphaned stop orders and limit orders.
-						int amountToClose = Math.min(p.buyAmount, p.sellAmount);
-						/*
-								SimpleOrderSendParametersBuilder(java.lang.String alias, boolean isBuy, int size, OrderDuration duration, java.lang.String clientId, double limitPrice, double stopPrice, int takeProfitOffset, int stopLossOffset, int stopLossTrailingStep, int trailingStep, boolean doNotIncrease, double sizeMultiplier) 
-						 */
-						SimpleOrderSendParametersBuilder closeParams = new SimpleOrderSendParametersBuilder(
-							alias,
-							true,
-							amountToClose,
-							OrderDuration.GTC,
-							ONE_DIR_CLOSE_CLIENT_ID,
-							Double.NaN,
-							Double.NaN,
-							0,
-							0,
-							0,
-							0,
-							true,
-							1.0
-						);
-						sendOrder(closeParams.build());
-						closeParams.setBuy(false);
-						sendOrder(closeParams.build());
-					}
-				}
-			}
+            if (currenciesForSpotPosition.containsKey(currency)) {
 
-			StatusInfo newStatusInfo = new StatusInfo(
-				alias,
-				unrealizedPnl,
-				realizedPnl,
-				DEFAULT_CURRENCY,
-				position,
-				avePrice,
-				_volume,
-				workingBuys,
-				workingSells
-			);
+                Set<String> aliases = currenciesForSpotPosition.get(currency);
 
-			log.debug("+++Enter synchronize");
-			synchronized (aliasStatusInfos) {
-				aliasStatusInfos.put(alias, newStatusInfo);
-			}
-			log.debug("---Exit synchronize");
+                for (String alias : aliases) {
 
-			log.info("New Status Info: " + newStatusInfo);
+                    String baseCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getBaseCurrency();
+                    double minSize = ((InstrumentSpot) genericInstruments.get(alias)).getMinSize();
 
-			tradingListeners.forEach(l -> l.onStatus(newStatusInfo));
-			log.debug("+++Enter synchronize");
-			synchronized (fetchInfos) {
-				fetchInfos.clear();
-			}
-			log.debug("---Exit synchronize");
-			log.info("Done Sending Status Info");
-		}, 1, TimeUnit.SECONDS);
-		aliasSendStatusInfoFutures.put(alias, sendStatusInfoFuture);
-	}
+                    aliasedStatusInfos.computeIfAbsent(alias, v -> {
+                        StatusInfoLocal infoLocal = new StatusInfoLocal();
+                        infoLocal.setInstrumentAlias(alias);
+                        infoLocal.setCurrency(Double.valueOf(minSize) + " " + baseCurrency);
+                        return infoLocal;
+                        });
+                    StatusInfoLocal info = aliasedStatusInfos.computeIfPresent(alias, (k, v) -> {
+                        v.setPosition((int) Math.round(account.getAvailable() / minSize));
+                        v.setCurrency(Double.valueOf(minSize) + " " + baseCurrency);
+                        return v;
+                        });
 
-	private EnumSet<FetchInfo> getCurrFetchInfos() {
-		log.debug("+++Enter synchronize");
-		EnumSet<FetchInfo> currFetchInfos = null;
-		synchronized (fetchInfos) {
-			currFetchInfos = fetchInfos.clone();
-		}
-		log.debug("---Exit synchronize");
-		return currFetchInfos;
-	}
+                    updateStatus(info);
+                }
+            }
+        }
+    }
 
-	private Optional<List<OrderInfo>> fetchOrdersInfo(String instrPair, Expiration expiration) {
-		OrderInfoResponse fetchOrdersInfo = getConnector().fetchOrdersInfo(
-			OrderInfoRequest.builder().symbol(instrPair).expiration(expiration).build()
-		);
-		if (!fetchOrdersInfo.result) {
-			return Optional.empty();
-		}
-		return Optional.of(fetchOrdersInfo.orders);
-	}
 
-	private Optional<Contract> fetchContractInfo(String symbol, Expiration expiration) {
-		UserInfoResponse userInfoResponse = getConnector().fetchUserInfo();
-		if (!userInfoResponse.result) {
-			log.warn("fetchUserInfo failed with error code: " + userInfoResponse.errorCode);
-			return Optional.empty();
-		}
-		Optional<Contract> contract = userInfoResponse.info
-			.getSymbolsInfo()
-			.get(symbol.toLowerCase())
-			.getContracts()
-			.stream()
-			.filter(c -> c.getContractType().equalsIgnoreCase(expiration.name()))
-			.findFirst();
-		return contract;
-	}
+    @Override
+    public void subscribe(SubscribeInfo subscribeInfo) {
+        try {
+            if (isSubscribed(subscribeInfo, false)) {
+                getSubscribed(subscribeInfo);
+            }
+        } catch (NullPointerException e) {
+            if (subscribeInfo == null) {
+                Log.info("subscribeInfo is null");
+            } else {
+                String type = subscribeInfo.type.toLowerCase();
+                String symbol = subscribeInfo.symbol;
+                String alias = type + "@" + symbol;
+                Log.info("Cannot be subscribed to " + alias);
+                throw new RuntimeException();
+            }
+        }
+    }
 
-	@Override
-	protected void onOrder(Order order) {
-		log.debug("+++Enter synchronize");
-		synchronized (bmIdWorkingOrders) {
-			Optional<String> bmId = Optional.ofNullable(okexBmIds.get(order.getOrderId()));
-			log.info("Order Received: " + order.orderId);
-			log.info("Order: " + order);
-			log.info("BM ID isPresent: " + bmId.isPresent());
-			Object[] extracts = extractSymbolAndExpiration(order.getContractName());
-			String symbol = (String) extracts[0];
-			Expiration expiration = (Expiration) extracts[1];
-			OrderInfoBuilder wOrder = bmIdWorkingOrders.get(bmId.orElseGet(() -> trackWorkingOrder(order)));
-			switch (OkexOrderStatus.of(order.getStatus())) {
-				case Cancelled:
-					log.info("Order Cancelled");
-					wOrder.setStatus(OrderStatus.CANCELLED);
-					bmOkexIds.remove(wOrder.getOrderId());
-					okexBmIds.remove(order.getOrderId());
-					bmIdWorkingOrders.remove(wOrder.getOrderId());
-					tradingListeners.forEach(l -> l.onOrderUpdated(wOrder.build()));
-					wOrder.markAllUnchanged();
-					sendStatusInfo(symbol, expiration);
-					break;
-				case FullyFilled:
-					log.info("Order filled");
-					wOrder.setAverageFillPrice(order.priceAvg);
-					wOrder.setUnfilled(0);
-					wOrder.setFilled((int) order.amount);
-					wOrder.setStatus(OrderStatus.FILLED);
-					tradingListeners.forEach(l -> l.onOrderUpdated(wOrder.build()));
-					wOrder.markAllUnchanged();
+    public void getSubscribed(SubscribeInfo subscribeInfo) {
+            String type = subscribeInfo.type.toLowerCase();
+            String symbol = subscribeInfo.symbol;
+            String alias = type + "@" + symbol;
 
-					bmOkexIds.remove(wOrder.getOrderId());
-					okexBmIds.remove(order.getOrderId());
-					bmIdWorkingOrders.remove(wOrder.getOrderId());
+            singleThreadExecutor.execute(() -> {
+                synchronized (aliasInstruments) {
+                    getConnector().subscribeOrder(symbol, type);
 
-					/*
-			ExecutionInfoBuilder(java.lang.String orderId, int size, double price, java.lang.String executionId, long time, boolean isSimulated)
-					 */
-					String execId = UUID.randomUUID().toString();
-					ExecutionInfoBuilder executionInfoBuilder = new ExecutionInfoBuilder(
-						wOrder.getOrderId(),
-						wOrder.getFilled(),
-						wOrder.getAverageFillPrice(),
-						execId,
-						System.currentTimeMillis(),
-						false
-					);
-					tradingListeners.forEach(l -> l.onOrderExecuted(executionInfoBuilder.build()));
+                    if (type.equals("futures")) {
+                        refreshFuturesPosition(alias);
 
-					volume += order.amount;
-					log.debug("+++Enter synchronize");
-					synchronized (fetchInfos) {
-						fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
-					}
-					sendStatusInfo(symbol, expiration);
-					break;
-				case CancelRequestInProcess:
-					log.info("Order Cancel In Process");
-					wOrder.setStatus(OrderStatus.PENDING_CANCEL);
-					sendStatusInfo(symbol, expiration);
-					tradingListeners.forEach(l -> l.onOrderUpdated(wOrder.build()));
-					wOrder.markAllUnchanged();
-					break;
-				case PartiallyFilled:
-				case Unfilled:
-					log.info("Order Working");
-					wOrder.setStatus(OrderStatus.WORKING);
-					sendStatusInfo(symbol, expiration);
-					tradingListeners.forEach(l -> l.onOrderUpdated(wOrder.build()));
-					wOrder.markAllUnchanged();
-					break;
-			}
-		}
-		log.debug("---Exit synchronize");
-	}
+                        getConnector().subscribePositionFutures(symbol, type);
+                        String underlyingIndex = ((InstrumentFutures) genericInstruments.get(alias))
+                                .getUnderlyingIndex();
+                        refreshFuturesAccount(underlyingIndex);
 
-	@Override
-	protected void onPositionsFixedMargin(PositionsFixedMargin positions) {
-		positions.getPositions()
-			.stream()
-			.filter(p -> p.holdAmount > 0)
-			.forEach(p -> {
-				Object[] extracts = extractSymbolAndExpiration(p.getContractName());
-				String symbol = (String) extracts[0];
-				Expiration expiration = (Expiration) extracts[1];
-				log.debug("+++Enter synchronize");
-				synchronized (fetchInfos) {
-					log.info("On positions fixed margin");
-					fetchInfos.addAll(EnumSet.of(FetchInfo.Positions, FetchInfo.Contracts));
-				}
-				log.debug("---Exit synchronize");
-				sendStatusInfo(symbol, expiration);
-			});
-	}
+                        getConnector().TEMPsubscribeAccount(symbol, type, underlyingIndex);
 
-	@Override
-	protected void onContractsFixedMargin(Contracts contracts) {
-		contracts.contracts
-			.forEach(c -> {
-				String cId = String.valueOf(c.contractId);
-				int year = Integer.valueOf(cId.substring(0, 4));
-				int month = Integer.valueOf(cId.substring(4, 6));
-				int day = Integer.valueOf(cId.substring(6, 8));
-				LocalDate expiry = LocalDate.of(year, month, day);
-				Expiration expiration = determineExpiration(expiry);
-				log.debug("+++Enter synchronize");
-				synchronized (fetchInfos) {
-					log.info("On contracts fixed margin");
-					fetchInfos.addAll(EnumSet.of(FetchInfo.Contracts));
-				}
-				log.debug("---Exit synchronize");
+                    } else if (type.equals("spot")) {
 
-				sendStatusInfo(contracts.symbol.split("_")[0], expiration);
-			});
-	}
+                        refreshBalance(alias);
 
-	private Expiration determineExpiration(LocalDate expiry) {
-		log.debug("Determine Expiration: " + expiry);
-		Expiration expiration;
-		log.debug("WEEKS BETWEEN: " + ChronoUnit.WEEKS.between(LocalDate.now(), expiry));
-		switch ((int) ChronoUnit.WEEKS.between(LocalDate.now(), expiry)) {
-			case 0:
-				expiration = Expiration.this_week;
-				break;
-			case 1:
-				expiration = Expiration.next_week;
-				break;
-			default:
-				expiration = Expiration.quarter;
-		}
-		log.debug("Expiration: " + expiration);
-		return expiration;
-	}
+                        String baseCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getBaseCurrency();
+                        String quoteCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getQuoteCurrency();
 
-	public static void main(String[] args) throws InterruptedException {
-		OkexRealTimeTradingProvider.RUN_MAIN = true;
-		try (OkexRealTimeTradingProvider provider = new OkexRealTimeTradingProvider()) {
-			String apiKey = "d7086a54-4080-4a2b-bb9b-d178912b1b5f";
-			String secretKey = "7F2F116B07679A1ABC5AC5B2468133BA";
-			int leverRate = 10;
-			provider.login(new UserPasswordDemoLoginData(apiKey + "::" + leverRate + "::0.5", secretKey, false));
-			Thread.sleep(2000);
+                        currenciesForSpotPosition.computeIfAbsent(baseCurrency, v -> new HashSet<String>());
+                        currenciesForSpotPosition.computeIfPresent(baseCurrency, (k, v) -> {
+                            v.add(alias);
+                            return v;
+                        });
 
-			provider.subscribe("BTC", "OKEX", "QUARTER");
+                        currenciesForSpotBalance.computeIfAbsent(quoteCurrency, v -> new HashSet<String>());
+                        currenciesForSpotBalance.computeIfPresent(quoteCurrency, (k, v) -> {
+                            v.add(alias);
+                            return v;
+                        });
 
-//			double price = 6500.00;
-//			SimpleOrderSendParameters params = new SimpleOrderSendParameters("BTC_QUARTER", true, 1,
-//					OrderDuration.GTC, price, price, 1);
-//			provider.sendOrder(params);
-//
-//			Thread.sleep(2000);
-//			String[] orderIds = provider.bmIdWorkingOrders.keySet().toArray(new String[0]);
-//			Arrays.stream(orderIds).forEach(bmId -> {
-//				OrderCancelParameters cancelParams = new OrderCancelParameters(bmId);
-//				provider.updateOrder(cancelParams);
-//			});
-			Thread.sleep(Long.MAX_VALUE);
-		}
-	}
+                        getConnector().TEMPsubscribeAccount(symbol, type, baseCurrency);
+                        getConnector().TEMPsubscribeAccount(symbol, type, quoteCurrency);
+                    }
 
-	private String trackWorkingOrder(Order order) {
-		log.debug("+++Enter synchronize");
-		String bmId = null;
-		synchronized (bmIdWorkingOrders) {
-			Object[] extracts = extractSymbolAndExpiration(order.contractName);
-			String alias = createAlias((String) extracts[0], (Expiration) extracts[1]);
+                    refreshOrders(alias);
 
-			boolean isBuy = LONG_ORDER_TYPES.contains(OkexOrderType.valueOf(order.type));
-			bmId = String.valueOf(order.orderId);
-			long okexId = order.orderId;
-			double price = order.price;
-			int amount = (int) order.amount;
+                }
+            });
+        
+    }
+    
+    @Override
+    public void unsubscribe(String alias) {
+        super.unsubscribe(alias);
 
-			OrderInfoBuilder builder = createWorkingOrderInfoBuilder(alias, bmId, isBuy, price, amount);
+        int at = alias.indexOf('@');
+        String symbol = alias.substring(at + 1);
+        String type = alias.substring(0, at);
 
-			tradingListeners.forEach(l -> l.onOrderUpdated(builder.build()));
-			builder.markAllUnchanged();
+        getConnector().TEMPunsubscribeOrder(symbol, type);
 
-			okexBmIds.put(okexId, bmId);
-			bmOkexIds.put(bmId, okexId);
-			bmIdWorkingOrders.put(builder.getOrderId(), builder);
-		}
-		log.debug("---Exit synchronize");
-		return bmId;
-	}
+        if (genericInstruments.get(alias) instanceof InstrumentSpot) {
 
-	private String trackWorkingOrder(OrderInfo order) {
-		log.debug("+++Enter synchronize");
-		String bmId = null;
-		synchronized (bmIdWorkingOrders) {
-			Object[] extracts = extractSymbolAndExpiration(order.contractName);
-			String alias = createAlias((String) extracts[0], (Expiration) extracts[1]);
+            String quoteCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getQuoteCurrency();
 
-			bmId = String.valueOf(order.orderId);
-			boolean isBuy = LONG_ORDER_TYPES.contains(OkexOrderType.valueOf(order.type));
-			long okexId = order.orderId;
-			double price = order.price;
-			int amount = order.amount;
+            currenciesForSpotPosition.computeIfPresent(quoteCurrency, (k, v) -> {
+                v.remove(alias);
+                return v;
+            });
 
-			OrderInfoBuilder builder = createWorkingOrderInfoBuilder(alias, bmId, isBuy, price, amount);
+            String baseCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getBaseCurrency();
 
-			tradingListeners.forEach(l -> l.onOrderUpdated(builder.build()));
-			builder.markAllUnchanged();
+            currenciesForSpotBalance.computeIfPresent(baseCurrency, (k, v) -> {
+                v.remove(alias);
+                return v;
+            });
+        }
+    }
 
-			okexBmIds.put(okexId, bmId);
-			bmOkexIds.put(bmId, okexId);
-			bmIdWorkingOrders.put(builder.getOrderId(), builder);
-		}
-		log.debug("---Exit synchronize");
-		return bmId;
-	}
+    private void refreshBalance(String alias) {
+        String type = OkexUtils.getTypeFromALias(alias);
 
-	private OrderInfoBuilder createWorkingOrderInfoBuilder(String alias, String bmId, boolean isBuy, double price, int amount) {
-		final OrderInfoBuilder builder = new OrderInfoBuilder(
-			alias,
-			bmId,
-			isBuy,
-			OrderType.LMT,//Okex only supports LMT orders
-			null,//Client ID can be null if coming from exchange
-			false//We set this to false since we shouldn't worry about it in L0 according to ducumentation
-		);
-		builder.setStopPrice(0.0)
-			.setLimitPrice(price)
-			.setUnfilled(amount)
-			.setDuration(OrderDuration.GTC)
-			.setStatus(OrderStatus.WORKING);
-		return builder;
-	}
+        if (type.equals("spot")) {
+            AccountSpot[] accounts;
+            try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+                accounts = restClient.customCall("/api/spot/v3/accounts", "GET", "", AccountSpot[].class, apiKey,
+                        secretKey, getConnector().passPhraze, null);
+            }
 
-	private Object[] extractSymbolAndExpiration(String contractName) {
-		String symbol = contractName.substring(0, 3);
-		int month = Integer.valueOf(contractName.substring(3, 5));
-		int day = Integer.valueOf(contractName.substring(5, 7));
-		LocalDate expiry = LocalDate.of(LocalDate.now().getYear(), month, day);
-		Expiration expiration = determineExpiration(expiry);
-		return new Object[]{symbol, expiration};
-	}
+            Map<String, AccountSpot> accountsMap = Arrays.stream(accounts)
+                    .collect(Collectors.toMap(AccountSpot::getCurrency, account -> account));
+
+            String quoteCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getQuoteCurrency();
+            double minSize = ((InstrumentSpot) genericInstruments.get(alias)).getMinSize();
+            AccountSpot quoteCurrencyAccount = accountsMap.get(quoteCurrency);
+            double quoteCurrencyBalance = 0.0;
+
+            if (quoteCurrencyAccount != null) {
+                quoteCurrencyBalance = quoteCurrencyAccount.getAvailable();
+            }
+
+            BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(
+                    quoteCurrencyBalance, // balance
+                    Double.NaN, // realized PnL,
+                    Double.NaN, // unrealized PnL,
+                    Double.NaN, // previousDayBalance,
+                    Double.NaN, // netLiquidityValue
+                    quoteCurrency, null);// rateToBase)
+
+            tradingListeners.forEach(l -> l.onBalance(new BalanceInfo(Collections.singletonList(balance))));
+
+            String baseCurrency = ((InstrumentSpot) genericInstruments.get(alias)).getBaseCurrency();
+            AccountSpot baseCurrencyAccount = accountsMap.get(baseCurrency);
+
+            double baseCurrencyBalance = 0.0;
+
+            if (baseCurrencyAccount != null) {
+                baseCurrencyBalance = baseCurrencyAccount.getAvailable();
+            }
+            
+            final double baseCurrencyBalanceFinal = baseCurrencyBalance;
+            aliasedStatusInfos.computeIfAbsent(alias, v -> {
+                StatusInfoLocal infoLocal = new StatusInfoLocal();
+                infoLocal.setInstrumentAlias(alias);
+                infoLocal.setCurrency(Double.valueOf(minSize) + " " + baseCurrency);
+                return infoLocal;
+                });
+            StatusInfoLocal info = aliasedStatusInfos.computeIfPresent(alias, (k, v) -> {
+                v.setPosition((int) Math.round(baseCurrencyBalanceFinal / minSize));
+                v.setCurrency(Double.valueOf(minSize) + " " + baseCurrency);
+                return v;
+                });
+
+            updateStatus(info);
+            
+        } else if (type.equals("futures")) {
+
+            String accountsResponse;
+            InstrumentGeneric generic = genericInstruments.get(alias);
+            InstrumentFutures instrumentFutures = (InstrumentFutures) generic;
+            String underlyingInstrument = instrumentFutures.getUnderlyingIndex();
+            try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+                accountsResponse = restClient.customCall("/api/futures/v3/accounts/" + underlyingInstrument, "GET", "",
+                        String.class, apiKey, secretKey, getConnector().passPhraze, null);
+            }
+
+            if (accountsResponse.contains("\"margin_mode\":\"crossed\"")) {
+                try {
+                    AccountsFuturesCrossMargin accountsCrossMargin = objectMapper.readValue(accountsResponse,
+                            AccountsFuturesCrossMargin.class);
+                    BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(
+                            accountsCrossMargin.getTotalAvailBalance(), // balance
+                            accountsCrossMargin.getRealizedPnl(), // realized PnL,
+                            accountsCrossMargin.getUnrealizedPnl(), // unrealized PnL,
+                            Double.NaN, // previousDayBalance,
+                            accountsCrossMargin.getEquity(), // netLiquidityValue
+                            underlyingInstrument, 1.0);// rateToBase)
+                    balanceMap.put(alias, balance);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } else if (accountsResponse.contains("\"margin_mode\":\"fixed\"")) {
+                try {
+                    AccountsFuturesFixedMarginResponse accountsFixedMarginResponse = objectMapper
+                            .readValue(accountsResponse, AccountsFuturesFixedMarginResponse.class);
+
+                    BalanceInCurrency balance = new BalanceInfo.BalanceInCurrency(
+                            accountsFixedMarginResponse.getTotalAvailBalance(), // balance
+                            accountsFixedMarginResponse.getRealizedPnl(), // realized PnL,
+                            accountsFixedMarginResponse.getUnrealizedPnl(), // unrealized PnL,
+                            Double.NaN, // previousDayBalance,
+                            accountsFixedMarginResponse.getEquity(), // netLiquidityValue
+                            underlyingInstrument, 1.0);// rateToBase)
+                    balanceMap.put(alias, balance);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        BalanceInfo info = new BalanceInfo(new ArrayList<BalanceInfo.BalanceInCurrency>(balanceMap.values()));
+        tradingListeners.forEach(l -> l.onBalance(info));
+    }
+
+    private void refreshOrders(String alias) {
+        String type = OkexUtils.getTypeFromALias(alias);
+        String instrumentId = OkexUtils.getInstrumentIdFromALias(alias);
+
+        if (this instanceof OkexRealTimeTradingProvider) {
+            if (type.equals("spot")) {
+                List<Map.Entry<String, String>> params = new ArrayList<>();
+                params.add(new AbstractMap.SimpleEntry<String, String>("instrument_id", instrumentId));
+                params.add(new AbstractMap.SimpleEntry<String, String>("status", "open"));
+
+                OrderDataSpot[] ordersSpot = null;
+                try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+                    String testordersSpot = restClient.customCall("/api/spot/v3/orders", "GET", "", String.class,
+                            apiKey, secretKey, getConnector().passPhraze, params);
+
+                    ordersSpot = objectMapper.readValue(testordersSpot, OrderDataSpot[].class);
+
+                    if (ordersSpot == null)
+                        return;
+
+                    for (OrderDataSpot spot : ordersSpot) {
+                        ((OkexRealTimeTradingProvider) this).onOrder(spot);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (type.equals("futures")) {
+                OrdersFuturesList ordersFutures;
+                String path = "/api/futures/v3/orders/" + instrumentId;
+
+                List<Map.Entry<String, String>> params = new ArrayList<>();
+                params.add(new AbstractMap.SimpleEntry<String, String>("status", "0"));
+
+                try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+                    ordersFutures = restClient.customCall(path, "GET", "", OrdersFuturesList.class, apiKey, secretKey,
+                            getConnector().passPhraze, params);
+
+                    if (ordersFutures == null)
+                        return;
+
+                    OrderDataFutures[] futures = ordersFutures.getOrder_info();
+
+                    if (futures == null)
+                        return;
+
+                    for (OrderDataFutures future : futures) {
+                        ((OkexRealTimeTradingProvider) this).onOrder(future);
+                    }
+                }
+            }
+        }
+    }
+
+	    private void refreshFuturesPosition(String alias) {
+	        String type = OkexUtils.getTypeFromALias(alias);
+	        
+	        if (!type.equals("futures")) return;
+	        
+	        String instrumentId = OkexUtils.getInstrumentIdFromALias(alias);
+	        
+	        if (this instanceof OkexRealTimeTradingProvider) {
+	            FuturesPositionsOfCurrencyResponse positionsResponse;
+	                String path = "/api/futures/v3/" + instrumentId + "/position";
+	                
+	                try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+	                    positionsResponse = restClient.customCall(path, "GET", "",
+	                            FuturesPositionsOfCurrencyResponse.class, apiKey, secretKey, getConnector().passPhraze, null);
+	                    
+	                    if (positionsResponse != null) {
+	                        onFuturesPosition(positionsResponse.getHolding());
+	                    }
+	                }
+	        }
+	    }
+	    
+    private void refreshFuturesAccount(String underlyingIndex) {
+
+        if (this instanceof OkexRealTimeTradingProvider) {
+            FuturesAccount response;
+            String path = "/api/futures/v3/accounts/" + underlyingIndex;
+
+            try (OkexFuturesRestClient restClient = new OkexFuturesRestClient(apiKey, secretKey)) {
+                response = restClient.customCall(path, "GET", "", FuturesAccount.class, apiKey, secretKey,
+                        getConnector().passPhraze, null);
+
+                if (response != null) {
+                    onFuturesAccountRestResponse(response);
+                }
+            }
+        }
+
+    }
+
+    public void onFuturesPosition(SubscribeFuturesPositionResponse response) {
+        onFuturesPosition(response.getData());
+    }
+
+    public void onFuturesPosition(List<FuturesPosition> data) {
+        for (FuturesPosition position : data) {
+
+            int qty = (int) Math.round(-position.getShortAvailQty() + position.getLongAvailQty());
+
+            double avrPrice = Math.abs((-position.getShortAvgCost() * position.getShortAvailQty()
+                    + position.getLongAvgCost() * position.getLongAvailQty()) / (double) qty);
+
+            String alias = "futures@" + position.getInstrumentId();
+
+            InstrumentFutures instrument = (InstrumentFutures) genericInstruments.get(alias);
+            String currency = "contract worth " + instrument.getContractVal() + " " + instrument.getQuoteCurrency();
+
+            double unrealizedPnl = getUpdatedUnrealizedPnl(alias, qty, avrPrice);
+
+            aliasedStatusInfos.computeIfAbsent(alias, v -> {
+                StatusInfoLocal infoLocal = new StatusInfoLocal();
+                infoLocal.setInstrumentAlias(alias);
+                infoLocal.setCurrency(currency);
+                return infoLocal;
+            });
+            StatusInfoLocal info = aliasedStatusInfos.computeIfPresent(alias, (k, v) -> {
+                v.setPosition(qty);
+                v.setUnrealizedPnl(unrealizedPnl);
+                v.setRealizedPnl(position.getRealizedPnl());
+                v.setCurrency(currency);
+                return v;
+            });
+
+            updateStatus(info);
+
+            positionsMap.put(alias, Pair.of((int) position.getShortAvailQty(), (int) position.getLongAvailQty()));
+        }
+    }
+        
+    public double getUpdatedUnrealizedPnl(String alias, int qty, double avrCost) {
+        if (qty == 0) {
+            return 0.0;
+        }
+        
+        UnrealizedPnlData data = unrealizedPnlMap.computeIfAbsent(alias, v -> new UnrealizedPnlData());
+        data.setQty(qty);
+        data.setAvrCost(avrCost);
+        
+        double price = qty > 0 ? data.getLastAskTrade() : data.getLastBidTrade();
+        
+        if (price == 0.0) {
+            return 0.0;
+        }
+        
+        double contractVal = ((InstrumentFutures) genericInstruments.get(alias)).getContractVal();
+        double naturalValue = contractVal/avrCost;
+
+
+        return - naturalValue + Math.abs(qty * contractVal/price);
+    }
+    
+    public double getUpdatedUnrealizedPnl(String alias, boolean isBuy, double lastTrade) {
+        UnrealizedPnlData data = unrealizedPnlMap.computeIfAbsent(alias, v -> new UnrealizedPnlData());
+
+        if (isBuy) {
+            data.setLastAskTrade(lastTrade);
+        } else {
+            data.setLastBidTrade(lastTrade);
+        }
+
+        int qty = data.getQty();
+        if (qty == 0) {
+            return 0.0;
+        }
+
+        double price = qty > 0 ? data.getLastAskTrade() : data.getLastBidTrade();
+
+        if (price == 0.0) {
+            return 0.0;
+        }
+
+        double avrCost = data.getAvrCost();
+
+        double contractVal = ((InstrumentFutures) genericInstruments.get(alias)).getContractVal();
+        double naturalValue = contractVal/avrCost;
+
+        return - naturalValue + Math.abs(qty * contractVal/price);
+        
+    }
+        
+    private void closeFuturesPosition(PlaceOrderRequest workaroundRequest, String workaroundId,
+            OrderInfoBuilder orderInfo, String type, int size) {
+        workaroundRequest.setType(type);
+        ((PlaceOrderRequestFuturesOrSwap) workaroundRequest).setSize(size);
+        ((PlaceOrderRequestFuturesOrSwap) workaroundRequest).setMatchPrice("1");
+
+        singleThreadExecutor.submit(() -> {
+            Log.debug("+++Enter synchronize");
+
+            bmIdSentOrders.put(workaroundId, orderInfo);
+
+            orderInfo.setStatus(OrderStatus.PENDING_SUBMIT);
+            tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
+            orderInfo.markAllUnchanged();
+
+            PlaceOrderResponse orderResponse = getConnector().placeOrder(workaroundRequest);
+
+            if (!orderResponse.isResult()) {
+                Log.info(
+                        "REST Order Rejected: " + orderResponse.getErrorCode() + " " + orderResponse.getErrorMessage());
+                orderInfo.setStatus(OrderStatus.REJECTED);
+                tradingListeners.forEach(l -> l.onOrderUpdated(orderInfo.build()));
+                orderInfo.markAllUnchanged();
+
+                adminListeners
+                        .forEach(
+                                l -> l.onSystemTextMessage(
+                                        "Failed to place order with error code: " + orderResponse.getErrorCode() + "\n"
+                                                + orderResponse.getErrorMessage(),
+                                        SystemTextMessageType.ORDER_FAILURE));
+                return;
+            }
+        });
+    }
+
 }

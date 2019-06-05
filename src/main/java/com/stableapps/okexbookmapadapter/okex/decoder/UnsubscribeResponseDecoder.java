@@ -20,7 +20,7 @@ public class UnsubscribeResponseDecoder
 
 	@Override
 	public boolean willDecode(String arg0) {
-		return (arg0.contains("\"channel\":\"removeChannel\",\"data\":{\"result\":"));
+		return (arg0.contains("\"event\":\"unsubscribe\",\"channel\":"));
 	}
 	
 }

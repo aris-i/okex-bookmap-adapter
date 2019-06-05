@@ -16,5 +16,9 @@ public class SubscribeContractMarketDepthResponse extends Message {
 
 	public int binary;
 	public String channel;
+	public String alias;
+	
+	public String table;
+	public String action;
 	public MarketDepths data;
 }

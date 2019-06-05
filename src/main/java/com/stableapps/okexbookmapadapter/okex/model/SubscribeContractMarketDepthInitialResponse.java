@@ -5,6 +5,7 @@
  */
 package com.stableapps.okexbookmapadapter.okex.model;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.Data;
 
 /**
@@ -12,6 +13,7 @@ import lombok.Data;
  * @author aris
  */
 @Data
+@JsonDeserialize(using = CustomSubscribeContractMarketDepthInitialResponseDeserializer.class)
 public class SubscribeContractMarketDepthInitialResponse extends Message {
 
 	public int binary;

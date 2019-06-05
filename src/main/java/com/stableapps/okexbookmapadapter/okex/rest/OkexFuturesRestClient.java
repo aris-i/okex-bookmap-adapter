@@ -5,167 +5,184 @@
  */
 package com.stableapps.okexbookmapadapter.okex.rest;
 
-import com.stableapps.okexbookmapadapter.okex.model.CancelOrdersRequest;
-import com.stableapps.okexbookmapadapter.okex.model.CancelOrdersResponse;
-import com.stableapps.okexbookmapadapter.okex.model.Expiration;
+import java.lang.reflect.Field;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import javax.ws.rs.client.WebTarget;
+import javax.ws.rs.core.Response;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stableapps.okexbookmapadapter.okex.OkexConnector;
+import com.stableapps.okexbookmapadapter.okex.model.rest.ErrorResponse;
 import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequest;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequestFuturesOrSwap;
+import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderRequestTokenOrMargin;
 import com.stableapps.okexbookmapadapter.okex.model.rest.PlaceOrderResponse;
-import com.stableapps.okexbookmapadapter.okex.model.rest.OrderInfoRequest;
-import com.stableapps.okexbookmapadapter.okex.model.rest.OrderInfoResponse;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PositionRequest;
-import com.stableapps.okexbookmapadapter.okex.model.rest.PositionRequestResponse;
-import com.stableapps.okexbookmapadapter.okex.model.rest.UserInfoResponse;
-import com.stableapps.okexbookmapadapter.okex.utils.SignForm;
-import javax.ws.rs.core.Form;
-import lombok.extern.log4j.Log4j;
+
+import velox.api.layer1.common.Log;
 
 /**
  *
  * @author aris
  */
-@Log4j
 public class OkexFuturesRestClient extends AbstractRestClient {
-	private static final int MAX_RETRY = 5;
+	private static final int MAX_RETRY = 1;
 
 	public OkexFuturesRestClient(String apiKey, String secretKey) {
-		super("https://www.okex.com/api/v1/", apiKey, secretKey);
+		super("https://www.okex.com", apiKey, secretKey);
 	}
 
-	public CancelOrdersResponse cancelOrders(CancelOrdersRequest cancelOrdersRequest) {
-		Form form = new Form();
+	public PlaceOrderResponse placeOrder(PlaceOrderRequest order, String apiKey, String secretKey, String passPhraze) {
 
-		form.param("api_key", apiKey);
+        if (order instanceof PlaceOrderRequestTokenOrMargin) {
+            PlaceOrderRequestTokenOrMargin order0 = (PlaceOrderRequestTokenOrMargin) order;
+            ObjectMapper mapper = new ObjectMapper();
+            String s = null;
 
-		// cancel orders request parameters
-		form.param("symbol", cancelOrdersRequest.getSymbol());
-		form.param("order_id", cancelOrdersRequest.getOrderIds());
-		form.param("contract_type", cancelOrdersRequest.getExpiration().name());
-
-		SignForm signForm = new SignForm();
-		String sign = signForm.sign(form, secretKey);
-		form.param("sign", sign);
-
-		return (CancelOrdersResponse) call("future_cancel.do", form, CancelOrdersResponse.class);
+            try {
+                s = mapper.writeValueAsString(order0);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+            return call("/api/spot/v3/orders", s, PlaceOrderResponse.class, apiKey, secretKey, passPhraze);
+        } else if (order instanceof PlaceOrderRequestFuturesOrSwap) {
+            PlaceOrderRequestFuturesOrSwap order0 = (PlaceOrderRequestFuturesOrSwap) order;
+            ObjectMapper mapper = new ObjectMapper();
+            String s = null;
+            
+            try {
+                s = mapper.writeValueAsString(order0);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+            
+            return call("/api/futures/v3/order", s, PlaceOrderResponse.class, apiKey, secretKey, passPhraze);
+        }
+        return null;
 	}
 
-	public PlaceOrderResponse placeOrder(PlaceOrderRequest order) {
-		log.info("Place Order:  "+order);
-		Form form = new Form();
-
-		form.param("api_key", apiKey);
-		// Order request parameters
-		form.param("symbol", order.getSymbol());
-		form.param("contract_type", order.getExpiration().name());
-		form.param("price", String.valueOf(order.getPrice()));
-		form.param("amount", String.valueOf(order.getAmount()));
-		form.param("type", String.valueOf(order.getType()));
-		form.param("match_price", String.valueOf(order.getMatchPrice()));
-		form.param("lever_rate", String.valueOf(order.getLeverRate()));
-
-		SignForm signForm = new SignForm();
-		String sign = signForm.sign(form, secretKey);
-		form.param("sign", sign);
-
-		return call("future_trade.do", form, PlaceOrderResponse.class);
-
-	}
-
-	public PositionRequestResponse fetchPosition(PositionRequest positionRequest) {
-		Form form = new Form();
-
-		form.param("api_key", apiKey);
-		form.param("symbol", positionRequest.getSymbol());
-		form.param("contract_type", positionRequest.getExpiration().name());
-		form.param("type", String.valueOf(1));
-
-		SignForm signForm = new SignForm();
-		String sign = signForm.sign(form, secretKey);
-		form.param("sign", sign);
-
-		return call("future_position_4fix.do", form, PositionRequestResponse.class
-		);
-
-	}
-
-	public OrderInfoResponse fetchOrdersInfo(OrderInfoRequest orderInfoRequest) {
-		Form form = new Form();
-
-		form.param("api_key", apiKey);
-		form.param("symbol", orderInfoRequest.getSymbol());
-		form.param("contract_type", orderInfoRequest.getExpiration().name());
-		form.param("status", orderInfoRequest.getStatus().value());
-		form.param("order_id", orderInfoRequest.getOrderId());
-		form.param("current_page", orderInfoRequest.getCurrentPage());
-		form.param("page_length", orderInfoRequest.getPageLength());
-
-		SignForm signForm = new SignForm();
-		String sign = signForm.sign(form, secretKey);
-		form.param("sign", sign);
-
-		return call("future_order_info.do", form, OrderInfoResponse.class);
-
-	}
-
-	public UserInfoResponse fetchUserInfo() {
-		Form form = new Form();
-		form.param("api_key", apiKey);
-
-		SignForm signForm = new SignForm();
-		String sign = signForm.sign(form, secretKey);
-		form.param("sign", sign);
-
-		return call("future_userinfo_4fix.do", form, UserInfoResponse.class);
-
-	}
-
-	private <R> R call(String path, Form form, Class<R> responseClass) {
+	public <R> R call(String path, String json, Class<R> responseClass, String apiKey, String secretKey, String passPhraze) {
 		int retry = 0;
+		ErrorResponse errorResponse = null;
+		
 		while (retry < MAX_RETRY) {
 			try {
-				R response = getWebTarget().path(path)
+			    String timestamp = Instant.now().toString();
+			    String formAsJson = json;
+			    String messageBody = OkexConnector.createMessageBody(timestamp, "POST", path, formAsJson);
+			    String sign = OkexConnector.generateSignature(secretKey, messageBody);
+			    
+			    Response response = getWebTarget()
+				    .path(path)
 					.request(javax.ws.rs.core.MediaType.APPLICATION_JSON)
-					.post(
-						javax.ws.rs.client.Entity.entity(
-							form,
-							javax.ws.rs.core.MediaType.APPLICATION_FORM_URLENCODED
-						), responseClass
+					.header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36")
+					.header("OK-ACCESS-KEY", apiKey)
+					.header("OK-ACCESS-SIGN", sign)
+					.header("OK-ACCESS-TIMESTAMP", timestamp)
+					.header("OK-ACCESS-PASSPHRASE", passPhraze)
+					.post(javax.ws.rs.client.Entity.entity(
+                                        formAsJson,
+                                        javax.ws.rs.core.MediaType.APPLICATION_JSON)
 					);
-
-				log.info(String.format("Rest call to %s successful", path));
-				return response;
+			    
+			    R r = null;
+			    if (response.getStatus() == 200) {
+			        r = response.readEntity(responseClass);
+			    } else {
+			        errorResponse = response.readEntity(ErrorResponse.class);
+			        throw new Exception(errorResponse.getMessage() + " (error code " + errorResponse.getCode() + ")" );
+			    }
+			   
+				Log.info(String.format("Rest call to %s successful", path));
+				return r;
 			} catch (Exception e) {
-				log.warn(String.format("Rest call to %s failed: %s", path, e.getMessage()));
+				Log.info(String.format("Rest call to %s failed: %s", path, e.getMessage()));
 				try {
 					retry++;
-					log.info(String.format("Retrying rest call to %s n times: %d", path, retry));
+					Log.info(String.format("Retrying rest call to %s n times: %d", path, retry));
 					Thread.sleep(retry * 1000);
 				} catch (InterruptedException ex) {
-					log.info("Interrupted while trying to retry rest call");
+					Log.info("Interrupted while trying to retry rest call");
 					return null;
 				}
 			}
 		}
 
-		log.info( "Giving up calling REST: " +path);
+		Log.info( "Giving up calling REST: " +path);
 
 		try {
-			return responseClass.newInstance();
+		    R blankResponse = responseClass.newInstance();
+		    
+		    try {
+		        Field field = responseClass.getDeclaredField("errorMessage");
+		        field.setAccessible(true);
+		        field.set(blankResponse, errorResponse.getMessage());
+		        
+		        Field field1 = responseClass.getDeclaredField("errorCode");
+                field1.setAccessible(true);
+                field1.set(blankResponse, errorResponse.getCode());
+	        } catch (NoSuchFieldException | SecurityException e) {
+	            e.printStackTrace();
+            }
+		    return blankResponse;
 		} catch (InstantiationException | IllegalAccessException ex) {
 			throw new RuntimeException("Can't instantiate a blank response class");
 		}
 	}
+	
+    public <R> R customCall(String path, String method, String json, Class<R> responseClass, String apiKey,
+            String secretKey, String passPhraze, List<Map.Entry<String, String>> queryParams) {
+        int retry = 0;
 
-	public static void main(String[] args) {
-		//Try fetching position
-		String apiKey = "d7086a54-4080-4a2b-bb9b-d178912b1b5f";
-		String secretKey = "7F2F116B07679A1ABC5AC5B2468133BA";
-		try (OkexFuturesRestClient client = new OkexFuturesRestClient(apiKey, secretKey)) {
-			OrderInfoResponse fetchOrdersInfo = client.fetchOrdersInfo(OrderInfoRequest.builder().symbol("btc_usd").expiration(Expiration.quarter).build()
-			);
-			System.out.println("fetchOrdersInfo: " + fetchOrdersInfo);
-			PositionRequestResponse fetchPosition = client.fetchPosition(PositionRequest.builder().symbol("btc_usd").expiration(Expiration.quarter).build());
-			System.out.println("fetchPosition: " + fetchPosition);
-		}
+        while (retry < MAX_RETRY) {
+            try {
+                String timestamp = Instant.now().toString();
+                String formAsJson = json;
+                String pathForMessage = path;
+                String messageBody = OkexConnector.createMessageBody(timestamp, method, pathForMessage, queryParams,
+                        formAsJson);
+                String sign = OkexConnector.generateSignature(secretKey, messageBody);
+
+                @SuppressWarnings("unchecked")
+                WebTarget target = getWebTarget().path(path);
+
+                if (queryParams != null) {
+                    for (Map.Entry<String, String> entry : queryParams) {
+                        target = target.queryParam(entry.getKey(), entry.getValue());
+                    }
+                }
+
+                R response = target.request(javax.ws.rs.core.MediaType.APPLICATION_JSON).header("User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36")
+                        .header("OK-ACCESS-KEY", apiKey).header("OK-ACCESS-SIGN", sign)
+                        .header("OK-ACCESS-TIMESTAMP", timestamp).header("OK-ACCESS-PASSPHRASE", passPhraze)
+                        .get(responseClass);
+
+                Log.info(String.format("Rest call to %s successful", path));
+                return response;
+            } catch (Exception e) {
+                Log.info(String.format("Rest call to %s failed: %s", path, e.getMessage()));
+                try {
+                    retry++;
+                    Log.info(String.format("Retrying rest call to %s n times: %d", path, retry));
+                    Thread.sleep(retry * 1000);
+                } catch (InterruptedException ex) {
+                    Log.info("Interrupted while trying to retry rest call");
+                    return null;
+                }
+            }
+        }
+	    
+	    Log.info( "Giving up calling REST: " +path);
+	    
+	    try {
+	        return responseClass.newInstance();
+	    } catch (InstantiationException | IllegalAccessException ex) {
+	        throw new RuntimeException("Can't instantiate a blank response class" + responseClass.getCanonicalName());
+	    }
 	}
 
 }
