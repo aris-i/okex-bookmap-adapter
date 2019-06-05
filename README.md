@@ -11,3 +11,20 @@ After installing the bookmap jar files.  You can generate the adapter jar file b
 OKEX does not have a test account so you need to have a live account in order to use this adapter.
 
 Here's a quick guide on how to get started using this adapter:  https://1drv.ms/w/s!ArbBbZ723WK6gR9mZ-bCuLo6bn6k
+
+Updates:
+
+WARNING FOR TRADERS: this is an alpha version of the adapter. Although it is functional it is intended mostly for testing purposes.
+Please use it at your own risk.
+Before using the adapter for trading please make sure you can trade using OKEx web interface.
+
+Please insert [apiKey]::[passPhrase] in the login field
+Please insert [secretKey] in the password field.
+
+For example, if your apiKey is fgRo9yT and your passPhrase is jhdfgd768df what you should enter for login is
+
+fgRo9yT::jhdfgd768df
+
+For example, if your secretKey is fjksdi6esdYhdhH what you should enter for password is
+
+fjksdi6esdYhdhH
